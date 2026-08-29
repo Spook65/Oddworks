@@ -1,5 +1,9 @@
 # CURRENT_PROJECT_AUDIT
 
+## Canonicalization Resolution
+
+Follow-up cleanup established the repository root as the sole canonical Rojo project. The duplicate `my-new-game/**` project tree was removed after confirming it was not a nested Git repository and its checked source files were byte-for-byte duplicates of root `src/**`. The stale generated `build.rbxlx` artifact was removed from source control and ignored with a narrow `/build.rbxlx` rule.
+
 ## 1. Repository State
 
 Repository root: `/Users/bhann/Documents/Roblox Project`.
