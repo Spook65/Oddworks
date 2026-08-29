@@ -41,14 +41,13 @@ local noticeRemote = getRemoteEvent("Notice")
 local stateRequestRemote = getRemoteEvent("StateRequest")
 
 local playerData: { [Player]: PlayerData } = {}
-local generatedWorld = Workspace:FindFirstChild("OddworksArena")
-if generatedWorld then
-	generatedWorld:Destroy()
-end
 
-local arena = Instance.new("Folder")
-arena.Name = "OddworksArena"
-arena.Parent = Workspace
+local arena = Workspace:FindFirstChild("OddworksArena")
+if not arena then
+	arena = Instance.new("Folder")
+	arena.Name = "OddworksArena"
+	arena.Parent = Workspace
+end
 
 local function createPart(
 	name: string,
@@ -58,7 +57,17 @@ local function createPart(
 	material: Enum.Material,
 	parent: Instance?
 ): Part
-	local part = Instance.new("Part")
+	local targetParent = parent or arena
+	local existing = targetParent:FindFirstChild(name)
+	local part
+	if existing and existing:IsA("Part") then
+		part = existing
+	else
+		part = Instance.new("Part")
+		part.Name = name
+		part.Parent = targetParent
+	end
+
 	part.Name = name
 	part.Size = size
 	part.CFrame = cframe
@@ -67,7 +76,6 @@ local function createPart(
 	part.Anchored = true
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth
-	part.Parent = parent or arena
 	return part
 end
 
@@ -145,15 +153,29 @@ local function buildArena()
 	createPart("Vault Right Wall", Vector3.new(2, 12, 50), CFrame.new(23, 6, 125), Color3.fromRGB(42, 38, 54), Enum.Material.Metal)
 	createPart("Vault Back Wall", Vector3.new(44, 12, 2), CFrame.new(0, 6, 151), Color3.fromRGB(42, 38, 54), Enum.Material.Metal)
 
-	for _, z in ipairs({ 10, 90 }) do
-		createPart("Door Frame Left", Vector3.new(3, 16, 3), CFrame.new(-9.5, 8, z), Color3.fromRGB(24, 28, 34), Enum.Material.Metal)
-		createPart("Door Frame Right", Vector3.new(3, 16, 3), CFrame.new(9.5, 8, z), Color3.fromRGB(24, 28, 34), Enum.Material.Metal)
-		createPart("Door Frame Top", Vector3.new(22, 3, 3), CFrame.new(0, 15, z), Color3.fromRGB(24, 28, 34), Enum.Material.Metal)
-		createPart("Door Wall Left", Vector3.new(18, 12, 2), CFrame.new(-20, 6, z), Color3.fromRGB(31, 35, 42), Enum.Material.Metal)
-		createPart("Door Wall Right", Vector3.new(18, 12, 2), CFrame.new(20, 6, z), Color3.fromRGB(31, 35, 42), Enum.Material.Metal)
+	for _, frameConfig in ipairs({
+		{ prefix = "Access", z = 10 },
+		{ prefix = "Vault", z = 90 },
+	}) do
+		local z = frameConfig.z
+		local prefix = frameConfig.prefix
+		createPart(prefix .. " Door Frame Left", Vector3.new(3, 16, 3), CFrame.new(-9.5, 8, z), Color3.fromRGB(24, 28, 34), Enum.Material.Metal)
+		createPart(prefix .. " Door Frame Right", Vector3.new(3, 16, 3), CFrame.new(9.5, 8, z), Color3.fromRGB(24, 28, 34), Enum.Material.Metal)
+		createPart(prefix .. " Door Frame Top", Vector3.new(22, 3, 3), CFrame.new(0, 15, z), Color3.fromRGB(24, 28, 34), Enum.Material.Metal)
+		createPart(prefix .. " Door Wall Left", Vector3.new(18, 12, 2), CFrame.new(-20, 6, z), Color3.fromRGB(31, 35, 42), Enum.Material.Metal)
+		createPart(prefix .. " Door Wall Right", Vector3.new(18, 12, 2), CFrame.new(20, 6, z), Color3.fromRGB(31, 35, 42), Enum.Material.Metal)
 	end
 
-	local spawn = Instance.new("SpawnLocation")
+	local existingSpawn = arena:FindFirstChild("PlayerSpawn")
+	local spawn
+	if existingSpawn and existingSpawn:IsA("SpawnLocation") then
+		spawn = existingSpawn
+	else
+		spawn = Instance.new("SpawnLocation")
+		spawn.Name = "PlayerSpawn"
+		spawn.Parent = arena
+	end
+
 	spawn.Name = "PlayerSpawn"
 	spawn.Size = Vector3.new(8, 1, 8)
 	spawn.CFrame = CFrame.new(GameConfig.SpawnCFrame.Position - Vector3.new(0, 4.4, 0))
@@ -162,7 +184,6 @@ local function buildArena()
 	spawn.Anchored = true
 	spawn.Neutral = true
 	spawn.Duration = 0
-	spawn.Parent = arena
 end
 
 local function buildDoors()
@@ -178,6 +199,11 @@ local function buildDoors()
 		local openCFrame = closedCFrame * CFrame.new(0, doorConfig.size.Y + 2, 0)
 		local isOpen = false
 		local moving = false
+
+		local existingPrompt = door:FindFirstChild("DoorPrompt")
+		if existingPrompt then
+			existingPrompt:Destroy()
+		end
 
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.Name = "DoorPrompt"
@@ -224,6 +250,11 @@ local function buildKeycard()
 	local keycard = createPart("Keycard", Vector3.new(3.2, 0.2, 2), CFrame.new(GameConfig.Keycard.position), Color3.fromRGB(72, 199, 142), Enum.Material.Neon)
 	keycard.CanCollide = false
 
+	local existingPrompt = keycard:FindFirstChildWhichIsA("ProximityPrompt")
+	if existingPrompt then
+		existingPrompt:Destroy()
+	end
+
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.ActionText = "Take"
 	prompt.ObjectText = "Keycard"
@@ -249,14 +280,20 @@ local function buildKeycard()
 end
 
 local function buildCores()
-	local coresFolder = Instance.new("Folder")
-	coresFolder.Name = "EnergyCores"
-	coresFolder.Parent = arena
+	local existingCoresFolder = arena:FindFirstChild("EnergyCores")
+	local coresFolder
+	if existingCoresFolder and existingCoresFolder:IsA("Folder") then
+		coresFolder = existingCoresFolder
+	else
+		coresFolder = Instance.new("Folder")
+		coresFolder.Name = "EnergyCores"
+		coresFolder.Parent = arena
+	end
 
 	local coreParts = {}
 	for _, coreConfig in ipairs(GameConfig.Cores) do
 		local core = createPart(
-			"Energy Core",
+			coreConfig.name,
 			Vector3.new(2.5, 2.5, 2.5),
 			CFrame.new(coreConfig.position),
 			Color3.fromRGB(252, 220, 88),
@@ -267,7 +304,8 @@ local function buildCores()
 		core.CanCollide = false
 		core:SetAttribute("CoreId", coreConfig.id)
 
-		local light = Instance.new("PointLight")
+		local existingLight = core:FindFirstChildWhichIsA("PointLight")
+		local light = existingLight or Instance.new("PointLight")
 		light.Color = core.Color
 		light.Range = 14
 		light.Brightness = 1.5
@@ -301,9 +339,15 @@ local function buildCores()
 end
 
 local function buildGuideNpc()
-	local model = Instance.new("Model")
-	model.Name = "Guide"
-	model.Parent = arena
+	local existingGuide = arena:FindFirstChild("Guide")
+	local model
+	if existingGuide and existingGuide:IsA("Model") then
+		model = existingGuide
+	else
+		model = Instance.new("Model")
+		model.Name = "Guide"
+		model.Parent = arena
+	end
 
 	local rootCFrame = CFrame.new(12, 3, -30)
 	local root = createPart("HumanoidRootPart", Vector3.new(2, 2, 1), rootCFrame, Color3.fromRGB(0, 0, 0), Enum.Material.SmoothPlastic, model)
@@ -321,11 +365,22 @@ local function buildGuideNpc()
 		bodyPart.CanCollide = false
 	end
 
-	local humanoid = Instance.new("Humanoid")
+	local existingHumanoid = model:FindFirstChildWhichIsA("Humanoid")
+	local humanoid = existingHumanoid or Instance.new("Humanoid")
 	humanoid.DisplayName = "Guide"
 	humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
 	humanoid.Parent = model
 	model.PrimaryPart = root
+
+	local oldPrompt = torso:FindFirstChildWhichIsA("ProximityPrompt")
+	if oldPrompt then
+		oldPrompt:Destroy()
+	end
+
+	local existingBillboard = head:FindFirstChild("Nameplate")
+	if existingBillboard then
+		existingBillboard:Destroy()
+	end
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "Nameplate"
@@ -365,7 +420,8 @@ local function buildPatrolHazard()
 	bot.Shape = Enum.PartType.Ball
 	bot.CanCollide = false
 
-	local light = Instance.new("PointLight")
+	local existingLight = bot:FindFirstChildWhichIsA("PointLight")
+	local light = existingLight or Instance.new("PointLight")
 	light.Color = bot.Color
 	light.Range = 18
 	light.Brightness = 2
