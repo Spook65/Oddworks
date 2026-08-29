@@ -38,14 +38,13 @@ end
 
 local stateRemote = getRemoteEvent("StateUpdate")
 local noticeRemote = getRemoteEvent("Notice")
+local stateRequestRemote = getRemoteEvent("StateRequest")
 
 local playerData: { [Player]: PlayerData } = {}
 local generatedWorld = Workspace:FindFirstChild("OddworksArena")
 if generatedWorld then
 	generatedWorld:Destroy()
 end
-
-Workspace.FallenPartsDestroyHeight = -100
 
 local arena = Instance.new("Folder")
 arena.Name = "OddworksArena"
@@ -520,6 +519,10 @@ buildCheckpointsAndFinish()
 Players.PlayerAdded:Connect(setupPlayer)
 Players.PlayerRemoving:Connect(function(player: Player)
 	playerData[player] = nil
+end)
+
+stateRequestRemote.OnServerEvent:Connect(function(player: Player)
+	pushState(player)
 end)
 
 for _, player in ipairs(Players:GetPlayers()) do

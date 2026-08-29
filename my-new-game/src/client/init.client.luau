@@ -9,6 +9,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local remotes = ReplicatedStorage:WaitForChild(GameConfig.RemotesFolderName)
 local stateRemote = remotes:WaitForChild("StateUpdate")
 local noticeRemote = remotes:WaitForChild("Notice")
+local stateRequestRemote = remotes:WaitForChild("StateRequest")
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "OddworksHud"
@@ -149,3 +150,4 @@ end
 
 stateRemote.OnClientEvent:Connect(renderState)
 noticeRemote.OnClientEvent:Connect(showNotice)
+stateRequestRemote:FireServer()
