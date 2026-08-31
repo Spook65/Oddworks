@@ -4,6 +4,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+-- Rojo maps src/server/init.server.luau to a Script named Server.
+-- Service modules under src/server/Services therefore appear as children of this script.
+local ServerRoot = script
+local Services = ServerRoot:WaitForChild("Services")
 
 type GameConstants = {
 	PROJECT_NAME: string,
@@ -16,6 +20,13 @@ if not gameConstantsModule:IsA("ModuleScript") then
 end
 
 local GameConstants = require(gameConstantsModule) :: GameConstants
+
+local playerStateServiceModule = Services:WaitForChild("PlayerStateService")
+if not playerStateServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.PlayerStateService must be a ModuleScript.")
+end
+
+local PlayerStateService = require(playerStateServiceModule)
 
 -- The server verifies that the persistent world exists instead of creating it
 -- here so Studio/Rojo remain the source of truth for this static bootstrap map.
@@ -48,5 +59,7 @@ requireChildOfClass(world, "Spawn", "SpawnLocation")
 requireChildOfClass(world, "SalvageField", "Part")
 requireChildOfClass(workshopPlots, "Plot01", "Part")
 requireChildOfClass(workshopPlots, "Plot02", "Part")
+
+PlayerStateService.Start()
 
 print(string.format("[%s][Server] Production bootstrap ready (v%s)", GameConstants.PROJECT_NAME, GameConstants.VERTICAL_SLICE_VERSION))
