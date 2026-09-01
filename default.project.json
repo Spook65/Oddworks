@@ -149,6 +149,108 @@
             "Material": "Concrete",
             "TopSurface": "Smooth",
             "BottomSurface": "Smooth"
+          },
+          "Salvage01": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "Size": [
+                4,
+                3,
+                4
+              ],
+              "Position": [
+                -24,
+                2,
+                44
+              ],
+              "Color": [
+                0.611764705882353,
+                0.5607843137254902,
+                0.4627450980392157
+              ],
+              "Material": "CorrodedMetal",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            },
+            "Prompt": {
+              "$className": "ProximityPrompt",
+              "$properties": {
+                "ActionText": "Salvage",
+                "ObjectText": "Scrap Pile",
+                "HoldDuration": 0.4,
+                "MaxActivationDistance": 10,
+                "RequiresLineOfSight": false
+              }
+            }
+          },
+          "Salvage02": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "Size": [
+                4,
+                3,
+                4
+              ],
+              "Position": [
+                0,
+                2,
+                48
+              ],
+              "Color": [
+                0.6901960784313725,
+                0.43529411764705883,
+                0.3411764705882353
+              ],
+              "Material": "CorrodedMetal",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            },
+            "Prompt": {
+              "$className": "ProximityPrompt",
+              "$properties": {
+                "ActionText": "Salvage",
+                "ObjectText": "Scrap Pile",
+                "HoldDuration": 0.4,
+                "MaxActivationDistance": 10,
+                "RequiresLineOfSight": false
+              }
+            }
+          },
+          "Salvage03": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "Size": [
+                4,
+                3,
+                4
+              ],
+              "Position": [
+                24,
+                2,
+                44
+              ],
+              "Color": [
+                0.4392156862745098,
+                0.5215686274509804,
+                0.6039215686274509
+              ],
+              "Material": "CorrodedMetal",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            },
+            "Prompt": {
+              "$className": "ProximityPrompt",
+              "$properties": {
+                "ActionText": "Salvage",
+                "ObjectText": "Scrap Pile",
+                "HoldDuration": 0.4,
+                "MaxActivationDistance": 10,
+                "RequiresLineOfSight": false
+              }
+            }
           }
         }
       }

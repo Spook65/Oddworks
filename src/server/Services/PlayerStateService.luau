@@ -137,6 +137,30 @@ function PlayerStateService.ClearAssignedPlot(player: Player, expectedPlotId: st
 	return true
 end
 
+-- Adds server-approved Scrap to a player's authoritative session state.
+-- The amount is validated here so future economy callers cannot accidentally award invalid values.
+function PlayerStateService.AddScrap(player: Player, amount: number): boolean
+	local state = playerStates[player]
+	if not state then
+		return false
+	end
+
+	if typeof(amount) ~= "number" then
+		return false
+	end
+
+	if amount ~= amount or amount == math.huge or amount == -math.huge then
+		return false
+	end
+
+	if amount <= 0 or math.floor(amount) ~= amount then
+		return false
+	end
+
+	state.Scrap += amount
+	return true
+end
+
 -- Returns a defensive copy of the player's current session state.
 -- Future server systems can read this safely without mutating authoritative tables by accident.
 function PlayerStateService.GetSnapshot(player: Player): PlayerState?
