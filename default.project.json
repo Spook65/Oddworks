@@ -3,6 +3,15 @@
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
+      "ODDWORKSNetwork": {
+        "$className": "Folder",
+        "StateRequest": {
+          "$className": "RemoteEvent"
+        },
+        "StateSnapshot": {
+          "$className": "RemoteEvent"
+        }
+      },
       "Shared": {
         "$path": "src/shared"
       }

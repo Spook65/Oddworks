@@ -35,6 +35,13 @@ end
 
 local WorkshopService = require(workshopServiceModule)
 
+local stateReplicationServiceModule = Services:WaitForChild("StateReplicationService")
+if not stateReplicationServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.StateReplicationService must be a ModuleScript.")
+end
+
+local StateReplicationService = require(stateReplicationServiceModule)
+
 local salvageServiceModule = Services:WaitForChild("SalvageService")
 if not salvageServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.SalvageService must be a ModuleScript.")
@@ -75,6 +82,7 @@ requireChildOfClass(workshopPlots, "Plot01", "Part")
 requireChildOfClass(workshopPlots, "Plot02", "Part")
 
 PlayerStateService.Start()
+StateReplicationService.Start()
 WorkshopService.Start()
 SalvageService.Start()
 

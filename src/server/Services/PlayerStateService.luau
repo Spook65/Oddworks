@@ -19,7 +19,16 @@ local PlayerStateService = {}
 -- This table is intentionally server-private. Future clients may receive
 -- sanitized copies, but they must never own the authoritative progression data.
 local playerStates: { [Player]: PlayerState } = {}
+-- This BindableEvent stays server-internal. Other server services may observe
+-- state changes, but clients cannot fire it or use it to mutate PlayerState.
+local stateChangedEvent = Instance.new("BindableEvent")
 local started = false
+
+-- Notifies server-only listeners that a player's authoritative state changed.
+-- Keeping the Fire call private prevents unrelated services from spoofing state updates.
+local function notifyStateChanged(player: Player)
+	stateChangedEvent:Fire(player)
+end
 
 -- Creates a brand-new state object so each player gets separate nested tables.
 -- Reusing table references here would let one player's Oddlings/unlocks leak into another player's state.
@@ -67,6 +76,7 @@ local function initializePlayer(player: Player)
 	end
 
 	playerStates[player] = createInitialPlayerState()
+	notifyStateChanged(player)
 	print(string.format("[ODDWORKS][PlayerState] Created session state for %s (%d).", player.Name, player.UserId))
 end
 
@@ -118,6 +128,7 @@ function PlayerStateService.AssignPlot(player: Player, plotId: string): boolean
 	end
 
 	state.AssignedPlotId = plotId
+	notifyStateChanged(player)
 	return true
 end
 
@@ -134,6 +145,7 @@ function PlayerStateService.ClearAssignedPlot(player: Player, expectedPlotId: st
 	end
 
 	state.AssignedPlotId = nil
+	notifyStateChanged(player)
 	return true
 end
 
@@ -158,7 +170,14 @@ function PlayerStateService.AddScrap(player: Player, amount: number): boolean
 	end
 
 	state.Scrap += amount
+	notifyStateChanged(player)
 	return true
+end
+
+-- Lets server services observe authoritative state changes without receiving
+-- direct access to the private playerStates table or the event's Fire method.
+function PlayerStateService.ObserveStateChanged(callback: (Player) -> ()): RBXScriptConnection
+	return stateChangedEvent.Event:Connect(callback)
 end
 
 -- Returns a defensive copy of the player's current session state.
