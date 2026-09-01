@@ -16,6 +16,9 @@ export type PlayerState = {
 
 local PlayerStateService = {}
 
+local STARTING_RECIPE_ID = "Toastmarshal"
+local MAX_OWNED_ODDLING_ID_LENGTH = 64
+
 -- This table is intentionally server-private. Future clients may receive
 -- sanitized copies, but they must never own the authoritative progression data.
 local playerStates: { [Player]: PlayerState } = {}
@@ -30,6 +33,26 @@ local function notifyStateChanged(player: Player)
 	stateChangedEvent:Fire(player)
 end
 
+-- Validates server-approved currency amounts before they touch authoritative state.
+-- Even server callers can contain bugs, so mutation APIs fail closed for invalid numbers.
+local function isPositiveFiniteInteger(amount: number): boolean
+	if typeof(amount) ~= "number" then
+		return false
+	end
+
+	if amount ~= amount or amount == math.huge or amount == -math.huge then
+		return false
+	end
+
+	return amount > 0 and math.floor(amount) == amount
+end
+
+-- Validates species/recipe-style IDs that are used as dictionary keys.
+-- Bounds avoid accepting giant strings into server-owned state by accident.
+local function isBoundedIdentifier(id: string, maxLength: number): boolean
+	return typeof(id) == "string" and #id > 0 and #id <= maxLength
+end
+
 -- Creates a brand-new state object so each player gets separate nested tables.
 -- Reusing table references here would let one player's Oddlings/unlocks leak into another player's state.
 local function createInitialPlayerState(): PlayerState
@@ -39,7 +62,10 @@ local function createInitialPlayerState(): PlayerState
 		WorkshopLevel = 1,
 		AssignedPlotId = nil,
 		OwnedOddlings = {},
-		UnlockedRecipes = {},
+		-- Toastmarshal is server-unlocked from the start for Vertical Slice 0.1.
+		UnlockedRecipes = {
+			[STARTING_RECIPE_ID] = true,
+		},
 	}
 end
 
@@ -157,19 +183,84 @@ function PlayerStateService.AddScrap(player: Player, amount: number): boolean
 		return false
 	end
 
-	if typeof(amount) ~= "number" then
-		return false
-	end
-
-	if amount ~= amount or amount == math.huge or amount == -math.huge then
-		return false
-	end
-
-	if amount <= 0 or math.floor(amount) ~= amount then
+	if not isPositiveFiniteInteger(amount) then
 		return false
 	end
 
 	state.Scrap += amount
+	notifyStateChanged(player)
+	return true
+end
+
+-- Checks affordability without changing state.
+-- Crafting uses this before attempting a transaction, but SpendScrap still validates again.
+function PlayerStateService.CanAffordScrap(player: Player, amount: number): boolean
+	local state = playerStates[player]
+	if not state then
+		return false
+	end
+
+	if not isPositiveFiniteInteger(amount) then
+		return false
+	end
+
+	return state.Scrap >= amount
+end
+
+-- Spends server-approved Scrap while guaranteeing the balance never goes below zero.
+-- Clients cannot call this directly; crafting uses it after validating recipe cost and unlocks.
+function PlayerStateService.SpendScrap(player: Player, amount: number): boolean
+	local state = playerStates[player]
+	if not state then
+		return false
+	end
+
+	if not isPositiveFiniteInteger(amount) then
+		return false
+	end
+
+	if state.Scrap < amount then
+		return false
+	end
+
+	state.Scrap -= amount
+	notifyStateChanged(player)
+	return true
+end
+
+-- Reports whether the server has unlocked a recipe for this player.
+-- The client may request a recipe, but the server-owned unlock set decides eligibility.
+function PlayerStateService.IsRecipeUnlocked(player: Player, recipeId: string): boolean
+	local state = playerStates[player]
+	if not state then
+		return false
+	end
+
+	if not isBoundedIdentifier(recipeId, MAX_OWNED_ODDLING_ID_LENGTH) then
+		return false
+	end
+
+	return state.UnlockedRecipes[recipeId] == true
+end
+
+-- Records owned Oddlings as species counters for the current simple MVP shape.
+-- Duplicates are intentional: each successful Toastmarshal craft increments the same counter.
+function PlayerStateService.AddOwnedOddling(player: Player, speciesId: string, amount: number): boolean
+	local state = playerStates[player]
+	if not state then
+		return false
+	end
+
+	if not isBoundedIdentifier(speciesId, MAX_OWNED_ODDLING_ID_LENGTH) then
+		return false
+	end
+
+	if not isPositiveFiniteInteger(amount) then
+		return false
+	end
+
+	local currentCount = state.OwnedOddlings[speciesId] or 0
+	state.OwnedOddlings[speciesId] = currentCount + amount
 	notifyStateChanged(player)
 	return true
 end

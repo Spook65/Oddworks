@@ -49,6 +49,13 @@ end
 
 local SalvageService = require(salvageServiceModule)
 
+local craftingServiceModule = Services:WaitForChild("CraftingService")
+if not craftingServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.CraftingService must be a ModuleScript.")
+end
+
+local CraftingService = require(craftingServiceModule)
+
 -- The server verifies that the persistent world exists instead of creating it
 -- here so Studio/Rojo remain the source of truth for this static bootstrap map.
 local function requireChildOfClass(parent: Instance, childName: string, expectedClassName: string): Instance
@@ -85,5 +92,6 @@ PlayerStateService.Start()
 StateReplicationService.Start()
 WorkshopService.Start()
 SalvageService.Start()
+CraftingService.Start()
 
 print(string.format("[%s][Server] Production bootstrap ready (v%s)", GameConstants.PROJECT_NAME, GameConstants.VERTICAL_SLICE_VERSION))

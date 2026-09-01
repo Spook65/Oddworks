@@ -10,6 +10,12 @@
         },
         "StateSnapshot": {
           "$className": "RemoteEvent"
+        },
+        "CraftRequest": {
+          "$className": "RemoteEvent"
+        },
+        "CraftResult": {
+          "$className": "RemoteEvent"
         }
       },
       "Shared": {

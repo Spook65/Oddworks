@@ -27,8 +27,16 @@ end
 
 local HudController = require(hudControllerModule)
 
+local craftingControllerModule = Controllers:WaitForChild("CraftingController")
+if not craftingControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.CraftingController must be a ModuleScript.")
+end
+
+local CraftingController = require(craftingControllerModule)
+
 -- The client remains presentation-only: it starts a HUD that displays sanitized
 -- server snapshots, but it does not own or mutate authoritative gameplay state.
 HudController.Start()
+CraftingController.Start()
 
 print(string.format("[%s][Client] Production bootstrap ready (v%s)", GameConstants.PROJECT_NAME, GameConstants.VERTICAL_SLICE_VERSION))
