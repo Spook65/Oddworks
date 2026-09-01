@@ -105,6 +105,38 @@ function PlayerStateService.HasState(player: Player): boolean
 	return playerStates[player] ~= nil
 end
 
+-- Records the plot chosen by WorkshopService without exposing the private PlayerState table.
+-- This keeps plot occupancy authority in WorkshopService while PlayerState owns only the AssignedPlotId field.
+function PlayerStateService.AssignPlot(player: Player, plotId: string): boolean
+	local state = playerStates[player]
+	if not state then
+		return false
+	end
+
+	if state.AssignedPlotId ~= nil and state.AssignedPlotId ~= plotId then
+		return false
+	end
+
+	state.AssignedPlotId = plotId
+	return true
+end
+
+-- Clears only the AssignedPlotId field during workshop release.
+-- The optional expectedPlotId prevents one service cleanup from erasing a newer/different assignment.
+function PlayerStateService.ClearAssignedPlot(player: Player, expectedPlotId: string?): boolean
+	local state = playerStates[player]
+	if not state then
+		return false
+	end
+
+	if expectedPlotId ~= nil and state.AssignedPlotId ~= expectedPlotId then
+		return false
+	end
+
+	state.AssignedPlotId = nil
+	return true
+end
+
 -- Returns a defensive copy of the player's current session state.
 -- Future server systems can read this safely without mutating authoritative tables by accident.
 function PlayerStateService.GetSnapshot(player: Player): PlayerState?
