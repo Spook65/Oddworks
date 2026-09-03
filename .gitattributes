@@ -1,0 +1,4 @@
+# Blender source files and Roblox interchange exports are binary assets.
+*.blend filter=lfs diff=lfs merge=lfs -text
+*.fbx filter=lfs diff=lfs merge=lfs -text
+*.glb filter=lfs diff=lfs merge=lfs -text

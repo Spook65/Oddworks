@@ -17,6 +17,8 @@ Read the relevant contracts before significant implementation work:
 - [Monetization Contract](docs/MONETIZATION_CONTRACT.md)
 - [Codex Workflow](docs/CODEX_WORKFLOW.md)
 - [Vertical Slice 0.1 Plan](docs/VERTICAL_SLICE_PLAN.md)
+- [Blender Asset Pipeline](docs/BLENDER_PIPELINE.md)
+- [Asset Provenance Registry](docs/ASSET_PROVENANCE.md)
 
 ## Getting Started
 To build the place from scratch, use:

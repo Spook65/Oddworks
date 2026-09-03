@@ -7,3 +7,7 @@
 /*.rbxl.lock
 
 sourcemap.json
+
+# Blender backup files; canonical .blend source files remain tracked via Git LFS.
+*.blend1
+*.blend2
