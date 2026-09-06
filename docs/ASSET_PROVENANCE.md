@@ -55,3 +55,12 @@ No third-party production assets have been approved or recorded yet.
 | Internal Asset Name | Original Asset Name | Creator | Source | Source URL / Reference | License | Date Obtained | Attribution Requirement | Modifications | ODDWORKS Usage |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | _Template only_ |  |  |  |  |  |  |  |  |  |
+
+## Internal Disposable Test Assets
+
+These entries are internally created pipeline fixtures, not third-party production assets.
+
+| Internal Asset Name | Original Asset Name | Creator | Source | Source URL / Reference | License | Date Obtained | Attribution Requirement | Modifications | ODDWORKS Usage |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ODDWORKS_PIPELINE_TEST` | `ODDWORKS_PIPELINE_TEST` | ODDWORKS internal, Codex-assisted Blender primitives | Internal Blender primitive geometry | `assets/source/blender/props/oddworks_pipeline_test.blend` | Internal disposable project fixture; no third-party license | 2026-09-02 | None | Created from simple box primitives with one orange material; exported as original multi-object, merged rigid, and textured diagnostic GLBs for pipeline verification | Disposable Blender-to-Roblox regression fixture only; not production gameplay content |
+| `pipeline_test_albedo` | `pipeline_test_albedo.png` | ODDWORKS internal, Codex-assisted generated diagnostic pixels | Internal generated PNG texture | `assets/textures/pipeline_test_albedo.png` | Internal disposable project fixture; no third-party license | 2026-09-03 | None | Created as a 64x64 red/green/blue/orange albedo diagnostic with black dividers and a white orientation marker; embedded into `oddworks_pipeline_test_textured.glb` | Disposable UV/albedo texture pipeline fixture only; not production gameplay content |
