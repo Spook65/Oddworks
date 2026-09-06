@@ -130,6 +130,12 @@ mesh(es)
 
 Do not weld Toastmarshal into one solid statue, merge all future character geometry blindly, or build the rig before the dedicated character-rigging pass.
 
+### Rigged / Skinned Oddling
+
+Use this category when character geometry must move by bones rather than by separate rigid parts.
+
+The expected structure is one or more skinned meshes controlled by an intentional armature. Bones should have semantic names, a clear parent/child hierarchy, and deliberate deformation ownership through vertex weights. This is the structural path future animated Oddlings should investigate before production character work begins.
+
 ## Grounding And Placement
 
 Blender authoring should support future Roblox grounding by using predictable pivots, bounding geometry, and intentional character bottoms.
@@ -422,8 +428,149 @@ UV
 
 Passing this texture test does not verify character rigging. Passing a future rigging test will not automatically verify textures.
 
+## Verified Rigging Dry-Run Preparation
+
+Pass 5.5E adds a disposable rigging regression fixture:
+
+```text
+assets/source/blender/props/oddworks_rig_test.blend
+assets/exports/props/oddworks_rig_test.glb
+assets/exports/props/oddworks_rig_test_animation.fbx
+```
+
+The rig fixture is not a production prop or Oddling.
+
+Verified Blender rig fixture facts:
+
+- Fixture name: `ODDWORKS_RIG_TEST`.
+- Mesh object: `ODDWORKS_RIG_TEST_SKINNED_MESH`.
+- Mesh data: `oddworks_rig_test_mesh_data`.
+- Armature object: `ODDWORKS_RIG_TEST_ARMATURE`.
+- Mesh structure: one segmented chunky vertical mesh with an integrated negative-Y forward marker.
+- Vertex count: `36`.
+- Face count: `32`.
+- Materials: `rig_test_lower_teal`, `rig_test_upper_orange`, `rig_test_forward_marker_white`.
+- Textures: none.
+- Third-party content: none.
+- Mesh transform: location `(0, 0, 0)`, rotation `(0, 0, 0)`, scale `(1, 1, 1)`.
+- Armature transform: location `(0, 0, 0)`, rotation `(0, 0, 0)`, scale `(1, 1, 1)`.
+- Grounding reference: mesh bottom sits on Blender `Z=0`.
+
+Verified armature hierarchy:
+
+```text
+Root
+-> Lower
+   -> Upper
+```
+
+- `Root`: head `(0, 0, 0)`, tail `(0, 0, 0.18)`, non-deforming in the Blender source.
+- `Lower`: parent `Root`, head `(0, 0, 0.18)`, tail `(0, 0, 1.0)`, deforming.
+- `Upper`: parent `Lower`, head `(0, 0, 1.0)`, tail `(0, 0, 2.0)`, deforming.
+
+Verified skinning facts:
+
+- The mesh is bound to `ODDWORKS_RIG_TEST_ARMATURE` with an Armature modifier.
+- Vertex groups: `Lower`, `Upper`.
+- `Root` is used as the grounded reference/root bone and does not own mesh deformation weights in the Blender source.
+- `Lower` controls the lower mesh region.
+- `Upper` controls the upper mesh region and the negative-Y forward marker.
+- Four joint-row vertices at Blender `Z=1.0` are intentionally weighted `Lower=0.5`, `Upper=0.5`.
+- Weight counts: `12` lower-only vertices, `20` upper-only vertices, `4` blended vertices, `0` unweighted vertices.
+- Maximum verified influences per vertex: `2`.
+
+Verified Blender pose and animation facts:
+
+- Action name: `ODDWORKS_RIG_TEST_BEND`.
+- Timeline: frames `1` through `30`.
+- FPS: `30`.
+- Frame `1`: neutral pose.
+- Frame `15`: `Upper` rotates `30` degrees around local X, bending the upper section toward Blender negative Y.
+- Frame `30`: returns to neutral.
+- Sampled evaluated mesh bounds changed from frame `1` min/max `(-0.32, -0.62, 0.0)` / `(0.32, 0.24, 2.0)` to frame `15` min/max `(-0.32, -0.8769, 0.0)` / `(0.32, 0.24, 1.986)`, then returned at frame `30`.
+- Temporary Blender camera renders were captured outside the repository at `/private/tmp/oddworks_rig_test_neutral.png` and `/private/tmp/oddworks_rig_test_bent.png`.
+- Live Blender MCP viewport screenshots were not available during this pass because the Blender addon connection was unavailable; the camera renders and evaluated bounds provide the Blender-side deformation proof.
+
+Verified rigged GLB export facts:
+
+- Export path: `assets/exports/props/oddworks_rig_test.glb`.
+- Blender operator: `bpy.ops.export_scene.gltf`.
+- Important settings used: `export_format='GLB'`, `use_selection=True`, `export_skins=True`, `export_animations=True`, `export_frame_range=True`, `export_force_sampling=True`, `export_frame_step=1`, `export_apply=False`.
+- `export_apply=False` was used because the mesh and armature transforms were already clean and applying transforms during skinned export can disturb rig data.
+- GLB output is valid glTF 2.0.
+- GLB structure: one scene, one mesh named `oddworks_rig_test_mesh_data`, and three primitives split by the three diagnostic materials.
+- Mesh attributes include `POSITION`, `NORMAL`, `JOINTS_0`, and `WEIGHTS_0`.
+- GLB skin exists with joints `Root`, `Lower`, and `Upper`.
+- GLB animation `ODDWORKS_RIG_TEST_BEND` exists and includes an `Upper` rotation sampler.
+
+Verified FBX animation export facts:
+
+- Export path: `assets/exports/props/oddworks_rig_test_animation.fbx`.
+- Blender operator: `bpy.ops.export_scene.fbx`.
+- Important settings used: `use_selection=True`, `object_types={'ARMATURE', 'MESH'}`, `global_scale=1.0`, `apply_unit_scale=True`, `apply_scale_options='FBX_SCALE_UNITS'`, `axis_forward='Z'`, `axis_up='Y'`, `add_leaf_bones=False`, `bake_anim=True`, `bake_anim_use_nla_strips=False`, `bake_anim_use_all_actions=False`, `bake_anim_force_startend_keying=False`, `bake_anim_step=1.0`, `bake_anim_simplify_factor=0.0`, `embed_textures=False`.
+- Blender 5.2's FBX exporter does not expose separate `bake_anim_start` or `bake_anim_end` operator properties; the source scene and action were authored over frames `1` through `30`.
+- Re-importing the FBX into Blender found the armature, mesh, `Root -> Lower -> Upper` bone hierarchy, and an action named `ODDWORKS_RIG_TEST_ARMATURE|Scene`.
+- The FBX re-import action appeared over frames `2` through `31`, so exact Studio frame numbering should be checked during manual Roblox animation import.
+
+Verified manual Roblox rig import settings:
+
+- Import `assets/exports/props/oddworks_rig_test.glb` through Studio's 3D Importer.
+- This fixture is not an R15 avatar and should not be converted into a humanoid unless Studio requires a specific manual import choice.
+- Use the existing verified orientation settings where the importer asks for them: World Forward `Front`, World Up `Top`, Scale Unit `Stud`.
+- Do not publish the disposable rig or animation as marketplace content.
+
+Verified manual Roblox rig result:
+
+- The rig import worked in Roblox Studio.
+- The imported structure preserved the intended rigged mesh path.
+- Roblox `Bone` instances appeared for `Root`, `Lower`, and `Upper`.
+- The `Root -> Lower -> Upper` hierarchy was correct.
+- Orientation was correct.
+- Scale was reasonable.
+- Grounding was touching for the fixture.
+- The Clip Editor recognized the imported rig.
+- The inspected model included an `AnimationController` with an `Animator` during verification.
+
+Verified manual Roblox animation result:
+
+- `assets/exports/props/oddworks_rig_test_animation.fbx` imported into Roblox Studio's Clip Editor.
+- The imported animation drove the rig.
+- The visible animation result was neutral -> upper section bends -> returns neutral.
+- Exact Roblox numeric frame range was not recorded in the manual observations.
+- The earlier Blender FBX round-trip showed the exported action as frames `2` through `31`; if Studio frame numbering differs from Blender's source frames `1` through `30`, document the difference, but the verified neutral/bend/neutral motion is not blocked by that numbering offset.
+
+Verified root bone finding:
+
+- In the Blender source, `Root` is non-deforming and has no vertex weights.
+- The FBX round-trip reported a different deform flag for `Root`, but the manual Roblox test confirmed the `Root` bone exists, the hierarchy is correct, and the animation works.
+- Base future rig conclusions on actual Roblox bone behavior and vertex weighting, not only the FBX round-trip deform flag.
+
+Verified animated Oddling structural pipeline:
+
+```text
+mesh
+-> armature
+-> semantic bones
+-> controlled skinning
+-> animation Actions
+-> rigged Roblox import
+```
+
+This verifies the disposable custom rig path. It still does not make the fixture an R15 avatar and does not replace future production character art direction.
+
+Future non-Humanoid Oddling animation should use this planned runtime structure:
+
+```text
+Model
+-> rigged MeshPart / Bones
+-> AnimationController
+   -> Animator
+```
+
+Future gameplay should load animations through `Animator`, but no gameplay animation scripts are implemented in this pass.
+
 ## Current Scope
 
-Pass 5.5B created infrastructure only. Pass 5.5C added the disposable geometry regression fixture documented above. Pass 5.5D adds a disposable textured fixture for manual Roblox texture verification.
+Pass 5.5B created infrastructure only. Pass 5.5C added the disposable geometry regression fixture documented above. Pass 5.5D verified the disposable UV/albedo texture fixture. Pass 5.5E verified the disposable Blender-to-Roblox rigging, skinning, and animation fixture.
 
 Do not create Toastmarshal, Conejurer, downloaded food models, Poly Haven assets, production GLB/FBX exports, or production Roblox imports in this pass.
