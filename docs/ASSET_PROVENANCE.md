@@ -56,6 +56,14 @@ No third-party production assets have been approved or recorded yet.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | _Template only_ |  |  |  |  |  |  |  |  |  |
 
+## Internal Production Assets
+
+These entries are original ODDWORKS production assets created internally. They are not third-party assets.
+
+| Internal Asset Name | Original Asset Name | Creator | Source | Source URL / Reference | License | Date Obtained | Attribution Requirement | Modifications | ODDWORKS Usage |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `Toastmarshal` | `Toastmarshal` | ODDWORKS internal, Codex-assisted Blender blockout | Internal Blender primitive/custom geometry based on `docs/ODDLINGS/TOASTMARSHAL_ART_SPEC.md` | `assets/source/blender/oddlings/toastmarshal.blend` | ODDWORKS internal original production character; no third-party license | 2026-09-06 | None | Pass 5.6A v0.1 visual blockout only; no third-party geometry, no third-party textures, no production rig, no production UV/albedo texture, no GLB/FBX export | Common/base Toastmarshal production source, pending human visual approval |
+
 ## Internal Disposable Test Assets
 
 These entries are internally created pipeline fixtures, not third-party production assets.
