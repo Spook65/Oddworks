@@ -62,7 +62,7 @@ These entries are original ODDWORKS production assets created internally. They a
 
 | Internal Asset Name | Original Asset Name | Creator | Source | Source URL / Reference | License | Date Obtained | Attribution Requirement | Modifications | ODDWORKS Usage |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `Toastmarshal` | `Toastmarshal` | ODDWORKS internal, Codex-assisted Blender blockout and rig structure | Internal Blender primitive/custom geometry and armature based on `docs/ODDLINGS/TOASTMARSHAL_ART_SPEC.md` | `assets/source/blender/oddlings/toastmarshal.blend` | ODDWORKS internal original production character; no third-party license | 2026-09-06 | None | Pass 5.6 visual blockout approved and locked; Pass 5.7A minimal armature/rig structure added; no third-party geometry, no third-party textures, no production UV/albedo texture, no GLB/FBX export, no production animation | Common/base Toastmarshal production source, rig structure pending human review |
+| `Toastmarshal` | `Toastmarshal` | ODDWORKS internal, Codex-assisted Blender blockout and rig structure | Internal Blender primitive/custom geometry, armature, and controlled weights based on `docs/ODDLINGS/TOASTMARSHAL_ART_SPEC.md` | `assets/source/blender/oddlings/toastmarshal.blend` | ODDWORKS internal original production character; no third-party license | 2026-09-06 | None | Pass 5.6 visual blockout approved and locked; Pass 5.7A minimal armature/rig structure added; Pass 5.7B controlled skinning/weight validation added; no third-party geometry, no third-party textures, no production UV/albedo texture, no GLB/FBX export, no production animation | Common/base Toastmarshal production source, controlled skinning pending human review |
 
 ## Internal Disposable Test Assets
 
