@@ -580,4 +580,53 @@ function OddlingDisplayService.Start()
 	print("[ODDWORKS][OddlingDisplay] Service started.")
 end
 
+-- Counts only this service's valid server-created displays for the player's current plot.
+-- Callers receive a number rather than mutable display bookkeeping or Workspace authority.
+function OddlingDisplayService.GetDisplayedCount(player: Player, speciesId: string): number
+	if not started or speciesId ~= SPECIES_ID then
+		return 0
+	end
+
+	local assignedPlotId = WorkshopService.GetAssignedPlotId(player)
+	if not assignedPlotId or not WorkshopService.GetAssignedPlot(player) then
+		return 0
+	end
+
+	local displaysFolder = runtimeDisplaysFolder
+	if not displaysFolder then
+		return 0
+	end
+
+	local container = displaysFolder:FindFirstChild(getPlayerContainerName(player))
+	if not container or not container:IsA("Folder") then
+		return 0
+	end
+
+	local displayedIndexes: { [number]: boolean } = {}
+	for _, child in ipairs(container:GetChildren()) do
+		if
+			child:IsA("Model")
+			and child:GetAttribute("OddlingSpeciesId") == speciesId
+			and child:GetAttribute("OwnerUserId") == player.UserId
+			and child:GetAttribute("AssignedPlotId") == assignedPlotId
+		then
+			local displayIndex = child:GetAttribute("DisplayIndex")
+			if
+				typeof(displayIndex) == "number"
+				and displayIndex > 0
+				and math.floor(displayIndex) == displayIndex
+			then
+				displayedIndexes[displayIndex] = true
+			end
+		end
+	end
+
+	local displayedCount = 0
+	for _ in pairs(displayedIndexes) do
+		displayedCount += 1
+	end
+
+	return displayedCount
+end
+
 return OddlingDisplayService

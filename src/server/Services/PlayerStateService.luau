@@ -192,6 +192,23 @@ function PlayerStateService.AddScrap(player: Player, amount: number): boolean
 	return true
 end
 
+-- Adds server-produced Hype to authoritative session state and notifies snapshot listeners.
+-- The narrow validated API prevents callers from introducing negative or fractional currency.
+function PlayerStateService.AddHype(player: Player, amount: number): boolean
+	local state = playerStates[player]
+	if not state then
+		return false
+	end
+
+	if not isPositiveFiniteInteger(amount) then
+		return false
+	end
+
+	state.Hype += amount
+	notifyStateChanged(player)
+	return true
+end
+
 -- Checks affordability without changing state.
 -- Crafting uses this before attempting a transaction, but SpendScrap still validates again.
 function PlayerStateService.CanAffordScrap(player: Player, amount: number): boolean

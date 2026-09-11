@@ -8,6 +8,7 @@ local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
 
 type ClientStateSnapshot = {
 	Scrap: number,
+	Hype: number,
 }
 
 local STATE_REQUEST_INTERVAL_SECONDS = 1
@@ -46,7 +47,7 @@ local function requireChildOfClass(parent: Instance, childName: string, expected
 end
 
 -- Builds the tiny client-safe payload for this pass.
--- Only Scrap is exposed; nested tables and server-only economy details stay private.
+-- Only currencies needed by the HUD are exposed; server-only economy details stay private.
 local function buildSanitizedSnapshot(player: Player): ClientStateSnapshot?
 	local authoritativeSnapshot = PlayerStateService.GetSnapshot(player)
 	if not authoritativeSnapshot then
@@ -55,6 +56,7 @@ local function buildSanitizedSnapshot(player: Player): ClientStateSnapshot?
 
 	return {
 		Scrap = authoritativeSnapshot.Scrap,
+		Hype = authoritativeSnapshot.Hype,
 	}
 end
 

@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 type ClientStateSnapshot = {
 	Scrap: number,
+	Hype: number,
 }
 
 local INITIAL_REQUEST_RETRY_SECONDS = 1.2
@@ -13,8 +14,9 @@ local INITIAL_REQUEST_ATTEMPTS = 3
 local HudController = {}
 
 -- The client keeps only a display copy. Editing this value or the TextLabel
--- cannot change the authoritative Scrap stored on the server.
+-- cannot change the authoritative currencies stored on the server.
 local displayScrap = 0
+local displayHype = 0
 local hasReceivedSnapshot = false
 local started = false
 
@@ -38,9 +40,29 @@ local function requireChildOfClass(parent: Instance, childName: string, expected
 	return child
 end
 
--- Creates the intentionally plain Scrap HUD for this technical pass.
--- Later UI can replace this, but the current responsibility is simply showing server state.
-local function createScrapLabel(): TextLabel
+-- Creates one intentionally plain currency label inside the temporary HUD.
+-- Shared styling keeps Scrap and Hype readable without introducing a production UI system.
+local function createCurrencyLabel(parent: ScreenGui, name: string, position: UDim2, initialText: string): TextLabel
+	local label = Instance.new("TextLabel")
+	label.Name = name
+	label.AnchorPoint = Vector2.new(0, 0)
+	label.Position = position
+	label.Size = UDim2.fromOffset(124, 42)
+	label.BackgroundColor3 = Color3.fromRGB(18, 24, 28)
+	label.BackgroundTransparency = 0.1
+	label.BorderSizePixel = 0
+	label.Font = Enum.Font.GothamBold
+	label.Text = initialText
+	label.TextColor3 = Color3.fromRGB(245, 238, 214)
+	label.TextSize = 20
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.Parent = parent
+	return label
+end
+
+-- Creates the intentionally plain currency HUD for this technical pass.
+-- Later UI can replace it; this layer only presents sanitized server state.
+local function createCurrencyHud(): (TextLabel, TextLabel)
 	local player = Players.LocalPlayer
 	local playerGui = player:WaitForChild("PlayerGui")
 
@@ -50,22 +72,24 @@ local function createScrapLabel(): TextLabel
 	screenGui.IgnoreGuiInset = false
 	screenGui.Parent = playerGui
 
-	local scrapLabel = Instance.new("TextLabel")
-	scrapLabel.Name = "ScrapLabel"
-	scrapLabel.AnchorPoint = Vector2.new(0, 0)
-	scrapLabel.Position = UDim2.fromOffset(16, 16)
-	scrapLabel.Size = UDim2.fromOffset(180, 42)
-	scrapLabel.BackgroundColor3 = Color3.fromRGB(18, 24, 28)
-	scrapLabel.BackgroundTransparency = 0.1
-	scrapLabel.BorderSizePixel = 0
-	scrapLabel.Font = Enum.Font.GothamBold
-	scrapLabel.Text = "Scrap: ..."
-	scrapLabel.TextColor3 = Color3.fromRGB(245, 238, 214)
-	scrapLabel.TextSize = 20
-	scrapLabel.TextXAlignment = Enum.TextXAlignment.Center
-	scrapLabel.Parent = screenGui
+	local scrapLabel = createCurrencyLabel(screenGui, "ScrapLabel", UDim2.fromOffset(16, 16), "Scrap: ...")
+	local hypeLabel = createCurrencyLabel(screenGui, "HypeLabel", UDim2.fromOffset(146, 16), "Hype: ...")
 
-	return scrapLabel
+	return scrapLabel, hypeLabel
+end
+
+-- Accepts only non-negative integer currency values for stable HUD rendering.
+-- Client validation handles malformed packets but never grants authority over server state.
+local function isValidCurrency(value: any): boolean
+	if typeof(value) ~= "number" then
+		return false
+	end
+
+	if value ~= value or value == math.huge or value == -math.huge then
+		return false
+	end
+
+	return value >= 0 and math.floor(value) == value
 end
 
 -- Validates the server snapshot shape before rendering.
@@ -76,34 +100,30 @@ local function readValidSnapshot(payload: any): ClientStateSnapshot?
 	end
 
 	for key in pairs(payload) do
-		if key ~= "Scrap" then
+		if key ~= "Scrap" and key ~= "Hype" then
 			return nil
 		end
 	end
 
 	local scrap = payload.Scrap
-	if typeof(scrap) ~= "number" then
-		return nil
-	end
-
-	if scrap ~= scrap or scrap == math.huge or scrap == -math.huge then
-		return nil
-	end
-
-	if scrap < 0 or math.floor(scrap) ~= scrap then
+	local hype = payload.Hype
+	if not isValidCurrency(scrap) or not isValidCurrency(hype) then
 		return nil
 	end
 
 	return {
 		Scrap = scrap,
+		Hype = hype,
 	}
 end
 
 -- Renders the latest server-approved display copy into the HUD.
--- The TextLabel is output only; there is no client function that sends Scrap mutations back.
-local function renderSnapshot(scrapLabel: TextLabel, snapshot: ClientStateSnapshot)
+-- The TextLabels are output only; no client function sends currency mutations back.
+local function renderSnapshot(scrapLabel: TextLabel, hypeLabel: TextLabel, snapshot: ClientStateSnapshot)
 	displayScrap = snapshot.Scrap
+	displayHype = snapshot.Hype
 	scrapLabel.Text = string.format("Scrap: %d", displayScrap)
+	hypeLabel.Text = string.format("Hype: %d", displayHype)
 end
 
 -- Requests the initial snapshot after OnClientEvent is already connected.
@@ -133,7 +153,7 @@ function HudController.Start()
 	local networkFolder = requireChildOfClass(ReplicatedStorage, "ODDWORKSNetwork", "Folder")
 	local stateRequest = requireChildOfClass(networkFolder, "StateRequest", "RemoteEvent") :: RemoteEvent
 	local stateSnapshot = requireChildOfClass(networkFolder, "StateSnapshot", "RemoteEvent") :: RemoteEvent
-	local scrapLabel = createScrapLabel()
+	local scrapLabel, hypeLabel = createCurrencyHud()
 
 	stateSnapshot.OnClientEvent:Connect(function(payload: any)
 		local snapshot = readValidSnapshot(payload)
@@ -143,7 +163,7 @@ function HudController.Start()
 		end
 
 		hasReceivedSnapshot = true
-		renderSnapshot(scrapLabel, snapshot)
+		renderSnapshot(scrapLabel, hypeLabel, snapshot)
 	end)
 
 	requestInitialState(stateRequest)
