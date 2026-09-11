@@ -56,6 +56,13 @@ end
 
 local CraftingService = require(craftingServiceModule)
 
+local oddlingDisplayServiceModule = Services:WaitForChild("OddlingDisplayService")
+if not oddlingDisplayServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.OddlingDisplayService must be a ModuleScript.")
+end
+
+local OddlingDisplayService = require(oddlingDisplayServiceModule)
+
 -- The server verifies that the persistent world exists instead of creating it
 -- here so Studio/Rojo remain the source of truth for this static bootstrap map.
 local function requireChildOfClass(parent: Instance, childName: string, expectedClassName: string): Instance
@@ -91,6 +98,7 @@ requireChildOfClass(workshopPlots, "Plot02", "Part")
 PlayerStateService.Start()
 StateReplicationService.Start()
 WorkshopService.Start()
+OddlingDisplayService.Start()
 SalvageService.Start()
 CraftingService.Start()
 
