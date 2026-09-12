@@ -56,6 +56,27 @@ end
 
 local CraftingService = require(craftingServiceModule)
 
+local oddlingDisplayServiceModule = Services:WaitForChild("OddlingDisplayService")
+if not oddlingDisplayServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.OddlingDisplayService must be a ModuleScript.")
+end
+
+local OddlingDisplayService = require(oddlingDisplayServiceModule)
+
+local hypeServiceModule = Services:WaitForChild("HypeService")
+if not hypeServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.HypeService must be a ModuleScript.")
+end
+
+local HypeService = require(hypeServiceModule)
+
+local workshopUpgradeServiceModule = Services:WaitForChild("WorkshopUpgradeService")
+if not workshopUpgradeServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.WorkshopUpgradeService must be a ModuleScript.")
+end
+
+local WorkshopUpgradeService = require(workshopUpgradeServiceModule)
+
 -- The server verifies that the persistent world exists instead of creating it
 -- here so Studio/Rojo remain the source of truth for this static bootstrap map.
 local function requireChildOfClass(parent: Instance, childName: string, expectedClassName: string): Instance
@@ -91,6 +112,9 @@ requireChildOfClass(workshopPlots, "Plot02", "Part")
 PlayerStateService.Start()
 StateReplicationService.Start()
 WorkshopService.Start()
+OddlingDisplayService.Start()
+HypeService.Start()
+WorkshopUpgradeService.Start()
 SalvageService.Start()
 CraftingService.Start()
 

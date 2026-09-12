@@ -194,4 +194,21 @@ function WorkshopService.GetAssignedPlotId(player: Player): string?
 	return playerPlotIds[player]
 end
 
+-- Resolves only the persistent plot currently assigned by this service.
+-- Display systems receive the known server instance without accepting a client-supplied plot ID.
+function WorkshopService.GetAssignedPlot(player: Player): BasePart?
+	local assignedPlotId = playerPlotIds[player]
+	if not assignedPlotId then
+		return nil
+	end
+
+	for _, plot in ipairs(validPlots) do
+		if plot.Id == assignedPlotId then
+			return plot.Instance
+		end
+	end
+
+	return nil
+end
+
 return WorkshopService
