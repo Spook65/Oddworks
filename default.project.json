@@ -177,6 +177,30 @@
                   "Transparency": 1
                 }
               }
+            },
+            "WorkshopUpgradeStation": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": true,
+                "Size": [5, 2, 4],
+                "Position": [-22, 1.45, 18],
+                "Color": [0.4627450980392157, 0.7647058823529411, 0.35294117647058826],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              },
+              "Prompt": {
+                "$className": "ProximityPrompt",
+                "$properties": {
+                  "ActionText": "Upgrade Workshop",
+                  "ObjectText": "Workshop Upgrade",
+                  "Enabled": false,
+                  "HoldDuration": 0.5,
+                  "MaxActivationDistance": 10,
+                  "RequiresLineOfSight": false
+                }
+              }
             }
           },
           "Plot02": {
@@ -250,6 +274,30 @@
                   "Size": [0.2, 0.2, 0.2],
                   "Position": [31, 0.45, 10],
                   "Transparency": 1
+                }
+              }
+            },
+            "WorkshopUpgradeStation": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": true,
+                "Size": [5, 2, 4],
+                "Position": [22, 1.45, 18],
+                "Color": [0.4627450980392157, 0.7647058823529411, 0.35294117647058826],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              },
+              "Prompt": {
+                "$className": "ProximityPrompt",
+                "$properties": {
+                  "ActionText": "Upgrade Workshop",
+                  "ObjectText": "Workshop Upgrade",
+                  "Enabled": false,
+                  "HoldDuration": 0.5,
+                  "MaxActivationDistance": 10,
+                  "RequiresLineOfSight": false
                 }
               }
             }

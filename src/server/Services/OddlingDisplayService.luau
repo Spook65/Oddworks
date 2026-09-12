@@ -5,12 +5,28 @@ local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 
 local Services = script.Parent
+local ServerRoot = assert(Services.Parent, "[ODDWORKS][OddlingDisplay] Services folder must have a parent.")
+local Config = ServerRoot:WaitForChild("Config")
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
 local WorkshopService = require(Services:WaitForChild("WorkshopService"))
+
+local workshopLevelsModule = Config:WaitForChild("WorkshopLevels")
+if not workshopLevelsModule:IsA("ModuleScript") then
+	error("[ODDWORKS][OddlingDisplay] Server.Config.WorkshopLevels must be a ModuleScript.")
+end
+
+local WorkshopLevels = require(workshopLevelsModule)
 
 type DisplaySlot = {
 	Name: string,
 	WorldCFrame: CFrame,
+}
+
+type WorkshopLevelDefinition = {
+	Level: number,
+	DisplayCapacity: number,
+	UpgradeCost: number?,
+	NextLevel: number?,
 }
 
 local TEMPLATE_PATH = "ServerStorage.ODDWORKSAssets.Oddlings.Toastmarshal_Common"
@@ -452,16 +468,29 @@ local function reconcilePlayer(player: Player)
 	end
 
 	local slots = discoverDisplaySlots(plot, plotId)
-	local displayTarget = math.min(ownedCount, #slots)
-	local warningKey = string.format("%s:%d:%d", plotId, ownedCount, #slots)
-	if ownedCount > #slots then
+	local levelDefinition = WorkshopLevels.GetDefinition(snapshot.WorkshopLevel) :: WorkshopLevelDefinition?
+	if
+		not levelDefinition
+		or levelDefinition.DisplayCapacity < 0
+		or math.floor(levelDefinition.DisplayCapacity) ~= levelDefinition.DisplayCapacity
+	then
+		cleanupPlayerDisplays(player)
+		warn(string.format("[ODDWORKS][OddlingDisplay] Missing valid capacity for Workshop Level %d.", snapshot.WorkshopLevel))
+		return
+	end
+
+	local activeCapacity = math.min(#slots, levelDefinition.DisplayCapacity)
+	local displayTarget = math.min(ownedCount, activeCapacity)
+	local warningKey = string.format("%s:%d:%d:%d", plotId, snapshot.WorkshopLevel, ownedCount, activeCapacity)
+	if ownedCount > activeCapacity then
 		if capacityWarningKeys[player] ~= warningKey then
 			warn(
 				string.format(
-					"[ODDWORKS][OddlingDisplay] %s owns %d Toastmarshals but %s has %d display slots; ownership is preserved.",
+					"[ODDWORKS][OddlingDisplay] %s owns %d Toastmarshals but Workshop Level %d activates %d of %d authored slots; ownership is preserved.",
 					player.Name,
 					ownedCount,
-					plotId,
+					snapshot.WorkshopLevel,
+					activeCapacity,
 					#slots
 				)
 			)

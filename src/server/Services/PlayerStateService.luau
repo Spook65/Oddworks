@@ -2,6 +2,17 @@
 
 local Players = game:GetService("Players")
 
+local Services = script.Parent
+local ServerRoot = assert(Services.Parent, "[ODDWORKS][PlayerState] Services folder must have a parent.")
+local Config = ServerRoot:WaitForChild("Config")
+
+local workshopLevelsModule = Config:WaitForChild("WorkshopLevels")
+if not workshopLevelsModule:IsA("ModuleScript") then
+	error("[ODDWORKS][PlayerState] Server.Config.WorkshopLevels must be a ModuleScript.")
+end
+
+local WorkshopLevels = require(workshopLevelsModule)
+
 export type OddlingCounts = { [string]: number }
 export type RecipeUnlocks = { [string]: boolean }
 
@@ -205,6 +216,69 @@ function PlayerStateService.AddHype(player: Player, amount: number): boolean
 	end
 
 	state.Hype += amount
+	notifyStateChanged(player)
+	return true
+end
+
+-- Checks authoritative Hype affordability without changing the player's balance.
+-- Upgrade transactions still revalidate during SpendHype to avoid stale assumptions.
+function PlayerStateService.CanAffordHype(player: Player, amount: number): boolean
+	local state = playerStates[player]
+	if not state or not isPositiveFiniteInteger(amount) then
+		return false
+	end
+
+	return state.Hype >= amount
+end
+
+-- Spends a validated server-approved Hype amount without allowing a negative balance.
+-- Clients cannot call this module because it exists only under ServerScriptService.
+function PlayerStateService.SpendHype(player: Player, amount: number): boolean
+	local state = playerStates[player]
+	if not state or not isPositiveFiniteInteger(amount) then
+		return false
+	end
+
+	if state.Hype < amount then
+		return false
+	end
+
+	state.Hype -= amount
+	notifyStateChanged(player)
+	return true
+end
+
+-- Advances only a configured transition from the expected current level.
+-- Consulting server configuration rejects stale requests, downgrades, skipped, and unsupported levels.
+function PlayerStateService.AdvanceWorkshopLevel(
+	player: Player,
+	expectedCurrentLevel: number,
+	newLevel: number
+): boolean
+	local state = playerStates[player]
+	if not state then
+		return false
+	end
+
+	if not isPositiveFiniteInteger(expectedCurrentLevel) or not isPositiveFiniteInteger(newLevel) then
+		return false
+	end
+
+	if state.WorkshopLevel ~= expectedCurrentLevel then
+		return false
+	end
+
+	if newLevel ~= expectedCurrentLevel + 1 then
+		return false
+	end
+
+	local currentDefinition = WorkshopLevels.GetDefinition(expectedCurrentLevel)
+	local nextDefinition = WorkshopLevels.GetDefinition(newLevel)
+	if not currentDefinition or currentDefinition.NextLevel ~= newLevel or not nextDefinition then
+		return false
+	end
+
+	state.WorkshopLevel = newLevel
 	notifyStateChanged(player)
 	return true
 end
