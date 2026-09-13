@@ -28,6 +28,13 @@ end
 
 local PlayerStateService = require(playerStateServiceModule)
 
+local progressionServiceModule = Services:WaitForChild("ProgressionService")
+if not progressionServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.ProgressionService must be a ModuleScript.")
+end
+
+local ProgressionService = require(progressionServiceModule)
+
 local workshopServiceModule = Services:WaitForChild("WorkshopService")
 if not workshopServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.WorkshopService must be a ModuleScript.")
@@ -110,6 +117,7 @@ requireChildOfClass(workshopPlots, "Plot01", "Part")
 requireChildOfClass(workshopPlots, "Plot02", "Part")
 
 PlayerStateService.Start()
+ProgressionService.Start()
 StateReplicationService.Start()
 WorkshopService.Start()
 OddlingDisplayService.Start()

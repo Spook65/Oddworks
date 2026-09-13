@@ -2,8 +2,8 @@
 
 export type OddlingDefinition = {
 	SpeciesId: string,
-	HypePerInterval: number,
-	HypeIntervalSeconds: number,
+	HypePerInterval: number?,
+	HypeIntervalSeconds: number?,
 }
 
 local Oddlings = {}
@@ -15,6 +15,13 @@ local definitions: { [string]: OddlingDefinition } = {
 		SpeciesId = "Toastmarshal",
 		HypePerInterval = 1,
 		HypeIntervalSeconds = 10,
+	},
+	-- Conejurer has authoritative identity now, but no production behavior until
+	-- a later pass installs and displays its runtime prototype.
+	Conejurer = {
+		SpeciesId = "Conejurer",
+		HypePerInterval = nil,
+		HypeIntervalSeconds = nil,
 	},
 }
 

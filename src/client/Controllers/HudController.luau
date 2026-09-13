@@ -70,7 +70,7 @@ end
 
 -- Creates the intentionally plain status HUD for this technical pass.
 -- Later UI can replace it; this layer only presents sanitized server state.
-local function createStatusHud(): (TextLabel, TextLabel, TextLabel)
+local function createStatusHud(): (TextLabel, TextLabel, TextLabel, TextLabel)
 	local player = Players.LocalPlayer
 	local playerGui = player:WaitForChild("PlayerGui")
 
@@ -89,8 +89,16 @@ local function createStatusHud(): (TextLabel, TextLabel, TextLabel)
 		210,
 		"Workshop Level: ..."
 	)
+	local conejurerRevealLabel = createStatusLabel(
+		screenGui,
+		"ConejurerRevealLabel",
+		UDim2.fromOffset(276, 66),
+		210,
+		"Conejurer - Coming Soon"
+	)
+	conejurerRevealLabel.Visible = false
 
-	return scrapLabel, hypeLabel, workshopLevelLabel
+	return scrapLabel, hypeLabel, workshopLevelLabel, conejurerRevealLabel
 end
 
 -- Accepts only non-negative integer state values for stable HUD rendering.
@@ -145,6 +153,7 @@ local function renderSnapshot(
 	scrapLabel: TextLabel,
 	hypeLabel: TextLabel,
 	workshopLevelLabel: TextLabel,
+	conejurerRevealLabel: TextLabel,
 	snapshot: ClientStateSnapshot
 )
 	displayScrap = snapshot.Scrap
@@ -153,6 +162,9 @@ local function renderSnapshot(
 	scrapLabel.Text = string.format("Scrap: %d", displayScrap)
 	hypeLabel.Text = string.format("Hype: %d", displayHype)
 	workshopLevelLabel.Text = string.format("Workshop Level: %d", displayWorkshopLevel)
+	-- The reveal is derived from server-replicated progression. It is presentation
+	-- only; the crafting server independently enforces unlock and availability.
+	conejurerRevealLabel.Visible = displayWorkshopLevel >= 2
 end
 
 -- Requests the initial snapshot after OnClientEvent is already connected.
@@ -182,7 +194,7 @@ function HudController.Start()
 	local networkFolder = requireChildOfClass(ReplicatedStorage, "ODDWORKSNetwork", "Folder")
 	local stateRequest = requireChildOfClass(networkFolder, "StateRequest", "RemoteEvent") :: RemoteEvent
 	local stateSnapshot = requireChildOfClass(networkFolder, "StateSnapshot", "RemoteEvent") :: RemoteEvent
-	local scrapLabel, hypeLabel, workshopLevelLabel = createStatusHud()
+	local scrapLabel, hypeLabel, workshopLevelLabel, conejurerRevealLabel = createStatusHud()
 
 	stateSnapshot.OnClientEvent:Connect(function(payload: any)
 		local snapshot = readValidSnapshot(payload)
@@ -192,7 +204,7 @@ function HudController.Start()
 		end
 
 		hasReceivedSnapshot = true
-		renderSnapshot(scrapLabel, hypeLabel, workshopLevelLabel, snapshot)
+		renderSnapshot(scrapLabel, hypeLabel, workshopLevelLabel, conejurerRevealLabel, snapshot)
 	end)
 
 	requestInitialState(stateRequest)

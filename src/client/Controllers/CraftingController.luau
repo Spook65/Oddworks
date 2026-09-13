@@ -7,6 +7,7 @@ type CraftResultCode =
 	"CRAFT_SUCCESS"
 	| "NOT_ENOUGH_SCRAP"
 	| "RECIPE_LOCKED"
+	| "RECIPE_NOT_AVAILABLE"
 	| "INVALID_RECIPE"
 	| "RATE_LIMITED"
 	| "CRAFT_FAILED"
@@ -17,6 +18,7 @@ local RESULT_MESSAGES: { [string]: string } = {
 	CRAFT_SUCCESS = "Crafted Toastmarshal.",
 	NOT_ENOUGH_SCRAP = "Need 5 Scrap.",
 	RECIPE_LOCKED = "Recipe locked.",
+	RECIPE_NOT_AVAILABLE = "Conejurer is coming soon.",
 	INVALID_RECIPE = "Invalid recipe.",
 	RATE_LIMITED = "Slow down.",
 	CRAFT_FAILED = "Craft failed.",

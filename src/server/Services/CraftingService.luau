@@ -19,12 +19,15 @@ type RecipeDefinition = {
 	RecipeId: string,
 	ScrapCost: number,
 	OutputSpeciesId: string,
+	RequiredWorkshopLevel: number,
+	IsCraftingEnabled: boolean,
 }
 
 type CraftResultCode =
 	"CRAFT_SUCCESS"
 	| "NOT_ENOUGH_SCRAP"
 	| "RECIPE_LOCKED"
+	| "RECIPE_NOT_AVAILABLE"
 	| "INVALID_RECIPE"
 	| "RATE_LIMITED"
 	| "CRAFT_FAILED"
@@ -36,6 +39,7 @@ local OWNERSHIP_INCREMENT = 1
 local RESULT_SUCCESS: CraftResultCode = "CRAFT_SUCCESS"
 local RESULT_NOT_ENOUGH_SCRAP: CraftResultCode = "NOT_ENOUGH_SCRAP"
 local RESULT_RECIPE_LOCKED: CraftResultCode = "RECIPE_LOCKED"
+local RESULT_RECIPE_NOT_AVAILABLE: CraftResultCode = "RECIPE_NOT_AVAILABLE"
 local RESULT_INVALID_RECIPE: CraftResultCode = "INVALID_RECIPE"
 local RESULT_RATE_LIMITED: CraftResultCode = "RATE_LIMITED"
 local RESULT_CRAFT_FAILED: CraftResultCode = "CRAFT_FAILED"
@@ -128,6 +132,17 @@ local function executeCraftTransaction(player: Player, recipe: RecipeDefinition)
 		return RESULT_RECIPE_LOCKED
 	end
 
+	local snapshot = PlayerStateService.GetSnapshot(player)
+	if not snapshot or snapshot.WorkshopLevel < recipe.RequiredWorkshopLevel then
+		return RESULT_RECIPE_LOCKED
+	end
+
+	-- Unlock and runtime availability are separate server decisions. Conejurer may
+	-- be visible at Level 2 while crafting remains disabled until its asset pass.
+	if not recipe.IsCraftingEnabled then
+		return RESULT_RECIPE_NOT_AVAILABLE
+	end
+
 	if not PlayerStateService.CanAffordScrap(player, recipe.ScrapCost) then
 		return RESULT_NOT_ENOUGH_SCRAP
 	end
@@ -147,8 +162,8 @@ local function executeCraftTransaction(player: Player, recipe: RecipeDefinition)
 		return RESULT_CRAFT_FAILED
 	end
 
-	local snapshot = PlayerStateService.GetSnapshot(player)
-	local ownedCount = if snapshot then snapshot.OwnedOddlings[recipe.OutputSpeciesId] or 0 else 0
+	local updatedSnapshot = PlayerStateService.GetSnapshot(player)
+	local ownedCount = if updatedSnapshot then updatedSnapshot.OwnedOddlings[recipe.OutputSpeciesId] or 0 else 0
 	print(
 		string.format(
 			"[ODDWORKS][CraftingService] %s crafted %s (-%d Scrap, owned: %d)",
