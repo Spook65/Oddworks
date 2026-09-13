@@ -13,6 +13,13 @@ end
 
 local WorkshopLevels = require(workshopLevelsModule)
 
+local recipesModule = Config:WaitForChild("Recipes")
+if not recipesModule:IsA("ModuleScript") then
+	error("[ODDWORKS][PlayerState] Server.Config.Recipes must be a ModuleScript.")
+end
+
+local Recipes = require(recipesModule)
+
 export type OddlingCounts = { [string]: number }
 export type RecipeUnlocks = { [string]: boolean }
 
@@ -29,6 +36,7 @@ local PlayerStateService = {}
 
 local STARTING_RECIPE_ID = "Toastmarshal"
 local MAX_OWNED_ODDLING_ID_LENGTH = 64
+local MAX_RECIPE_ID_LENGTH = 48
 
 -- This table is intentionally server-private. Future clients may receive
 -- sanitized copies, but they must never own the authoritative progression data.
@@ -327,11 +335,32 @@ function PlayerStateService.IsRecipeUnlocked(player: Player, recipeId: string): 
 		return false
 	end
 
-	if not isBoundedIdentifier(recipeId, MAX_OWNED_ODDLING_ID_LENGTH) then
+	if not isBoundedIdentifier(recipeId, MAX_RECIPE_ID_LENGTH) then
 		return false
 	end
 
 	return state.UnlockedRecipes[recipeId] == true
+end
+
+-- Unlocks only a recipe that exists in authoritative server configuration.
+-- The operation is idempotent so reconciliation can run repeatedly without duplicate changes or notifications.
+function PlayerStateService.UnlockRecipe(player: Player, recipeId: string): boolean
+	local state = playerStates[player]
+	if not state or not isBoundedIdentifier(recipeId, MAX_RECIPE_ID_LENGTH) then
+		return false
+	end
+
+	if not Recipes.GetRecipe(recipeId) then
+		return false
+	end
+
+	if state.UnlockedRecipes[recipeId] == true then
+		return true
+	end
+
+	state.UnlockedRecipes[recipeId] = true
+	notifyStateChanged(player)
+	return true
 end
 
 -- Records owned Oddlings as species counters for the current simple MVP shape.
