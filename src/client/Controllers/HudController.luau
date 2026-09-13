@@ -21,6 +21,7 @@ local displayHype = 0
 local displayWorkshopLevel = 1
 local hasReceivedSnapshot = false
 local started = false
+local workshopLevelChangedEvent = Instance.new("BindableEvent")
 
 -- Finds required network remotes that Rojo places in ReplicatedStorage.
 -- ReplicatedStorage is visible to both server and client, but remotes still need server validation.
@@ -70,7 +71,7 @@ end
 
 -- Creates the intentionally plain status HUD for this technical pass.
 -- Later UI can replace it; this layer only presents sanitized server state.
-local function createStatusHud(): (TextLabel, TextLabel, TextLabel, TextLabel)
+local function createStatusHud(): (TextLabel, TextLabel, TextLabel)
 	local player = Players.LocalPlayer
 	local playerGui = player:WaitForChild("PlayerGui")
 
@@ -89,16 +90,7 @@ local function createStatusHud(): (TextLabel, TextLabel, TextLabel, TextLabel)
 		210,
 		"Workshop Level: ..."
 	)
-	local conejurerRevealLabel = createStatusLabel(
-		screenGui,
-		"ConejurerRevealLabel",
-		UDim2.fromOffset(276, 66),
-		210,
-		"Conejurer - Coming Soon"
-	)
-	conejurerRevealLabel.Visible = false
-
-	return scrapLabel, hypeLabel, workshopLevelLabel, conejurerRevealLabel
+	return scrapLabel, hypeLabel, workshopLevelLabel
 end
 
 -- Accepts only non-negative integer state values for stable HUD rendering.
@@ -153,18 +145,20 @@ local function renderSnapshot(
 	scrapLabel: TextLabel,
 	hypeLabel: TextLabel,
 	workshopLevelLabel: TextLabel,
-	conejurerRevealLabel: TextLabel,
 	snapshot: ClientStateSnapshot
 )
+	local previousWorkshopLevel = if hasReceivedSnapshot then displayWorkshopLevel else nil
 	displayScrap = snapshot.Scrap
 	displayHype = snapshot.Hype
 	displayWorkshopLevel = snapshot.WorkshopLevel
 	scrapLabel.Text = string.format("Scrap: %d", displayScrap)
 	hypeLabel.Text = string.format("Hype: %d", displayHype)
 	workshopLevelLabel.Text = string.format("Workshop Level: %d", displayWorkshopLevel)
-	-- The reveal is derived from server-replicated progression. It is presentation
-	-- only; the crafting server independently enforces unlock and availability.
-	conejurerRevealLabel.Visible = displayWorkshopLevel >= 2
+	if previousWorkshopLevel ~= displayWorkshopLevel then
+		-- This client-internal event coordinates presentation only; it cannot mutate
+		-- server WorkshopLevel or replace server crafting validation.
+		workshopLevelChangedEvent:Fire(displayWorkshopLevel)
+	end
 end
 
 -- Requests the initial snapshot after OnClientEvent is already connected.
@@ -194,7 +188,7 @@ function HudController.Start()
 	local networkFolder = requireChildOfClass(ReplicatedStorage, "ODDWORKSNetwork", "Folder")
 	local stateRequest = requireChildOfClass(networkFolder, "StateRequest", "RemoteEvent") :: RemoteEvent
 	local stateSnapshot = requireChildOfClass(networkFolder, "StateSnapshot", "RemoteEvent") :: RemoteEvent
-	local scrapLabel, hypeLabel, workshopLevelLabel, conejurerRevealLabel = createStatusHud()
+	local scrapLabel, hypeLabel, workshopLevelLabel = createStatusHud()
 
 	stateSnapshot.OnClientEvent:Connect(function(payload: any)
 		local snapshot = readValidSnapshot(payload)
@@ -203,11 +197,21 @@ function HudController.Start()
 			return
 		end
 
+		renderSnapshot(scrapLabel, hypeLabel, workshopLevelLabel, snapshot)
 		hasReceivedSnapshot = true
-		renderSnapshot(scrapLabel, hypeLabel, workshopLevelLabel, conejurerRevealLabel, snapshot)
 	end)
 
 	requestInitialState(stateRequest)
+end
+
+-- Lets crafting presentation react to the sanitized WorkshopLevel display copy.
+-- The callback receives no recipe rules, costs, ownership, or mutation authority.
+function HudController.ObserveWorkshopLevelChanged(callback: (number) -> ()): RBXScriptConnection
+	local connection = workshopLevelChangedEvent.Event:Connect(callback)
+	if hasReceivedSnapshot then
+		task.defer(callback, displayWorkshopLevel)
+	end
+	return connection
 end
 
 return HudController

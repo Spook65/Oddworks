@@ -25,9 +25,9 @@ local recipeDefinitions: { [string]: RecipeDefinition } = {
 		ScrapCost = 8,
 		OutputSpeciesId = "Conejurer",
 		RequiredWorkshopLevel = 2,
-		-- Progression can reveal Conejurer before its runtime model is ready.
-		-- Server crafting remains disabled independently from that unlock.
-		IsCraftingEnabled = false,
+		-- The display service still verifies the runtime template immediately before
+		-- a transaction, so this flag cannot create invisible ownership by itself.
+		IsCraftingEnabled = true,
 	},
 }
 

@@ -54,7 +54,7 @@ No third-party production assets have been approved or recorded yet.
 
 | Internal Asset Name | Original Asset Name | Creator | Source | Source URL / Reference | License | Date Obtained | Attribution Requirement | Modifications | ODDWORKS Usage |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| _Template only_ |  |  |  |  |  |  |  |  |  |
+| `Conejurer_Prototype` | `Drooling Zombie` | Roblox | Roblox Creator Store | `https://create.roblox.com/store/asset/187789986` | Free Creator Store listing published by Roblox; no separate external license stated; prototype-only pending production review | 2026-09-12 | None shown by Creator Store | Removed all Scripts and ModuleScripts, AI/configuration packages, animation bundle, sound, billboard, and force behavior; retained inert classic visual parts, Motor6Ds, character meshes, face, Humanoid, and body colors; renamed `Conejurer_Prototype` | Temporary Vertical Slice second-species gameplay proof only; not ODDWORKS production character art and must be replaced before production |
 
 ## Internal Production Assets
 

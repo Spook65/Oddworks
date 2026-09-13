@@ -7,6 +7,7 @@ local Services = script.Parent
 local ServerRoot = assert(Services.Parent, "[ODDWORKS][CraftingService] Services folder must have a parent.")
 local Config = ServerRoot:WaitForChild("Config")
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
+local OddlingDisplayService = require(Services:WaitForChild("OddlingDisplayService"))
 
 local recipesModule = Config:WaitForChild("Recipes")
 if not recipesModule:IsA("ModuleScript") then
@@ -126,7 +127,7 @@ local function readRecipeId(...: any): string?
 end
 
 -- Performs the server-authoritative transaction with an explicit refund path.
--- Ownership is recorded before any physical Toastmarshal exists so the economy can be verified first.
+-- Ownership remains the durable session truth; physical display is downstream representation.
 local function executeCraftTransaction(player: Player, recipe: RecipeDefinition): CraftResultCode
 	if not PlayerStateService.IsRecipeUnlocked(player, recipe.RecipeId) then
 		return RESULT_RECIPE_LOCKED
@@ -137,9 +138,15 @@ local function executeCraftTransaction(player: Player, recipe: RecipeDefinition)
 		return RESULT_RECIPE_LOCKED
 	end
 
-	-- Unlock and runtime availability are separate server decisions. Conejurer may
-	-- be visible at Level 2 while crafting remains disabled until its asset pass.
+	-- Unlock and recipe enablement are separate server decisions, and both remain
+	-- independent from what a modified client chooses to show.
 	if not recipe.IsCraftingEnabled then
+		return RESULT_RECIPE_NOT_AVAILABLE
+	end
+
+	-- A configured recipe is still unavailable when its trusted runtime template
+	-- is missing or invalid. This check happens before Scrap can be spent.
+	if not OddlingDisplayService.HasRuntimeTemplate(recipe.OutputSpeciesId) then
 		return RESULT_RECIPE_NOT_AVAILABLE
 	end
 
@@ -207,7 +214,7 @@ local function handleCraftRequest(player: Player, ...: any)
 end
 
 -- Starts the crafting transaction boundary once.
--- No physical models are spawned here; Pass 5 is only request validation, Scrap spending, and ownership count.
+-- Physical models remain downstream, but runtime capability is verified before an economy transaction.
 function CraftingService.Start()
 	if started then
 		return
