@@ -23,6 +23,9 @@
       }
     },
     "ServerScriptService": {
+      "ServerPackages": {
+        "$path": "ServerPackages"
+      },
       "Server": {
         "$path": "src/server"
       }

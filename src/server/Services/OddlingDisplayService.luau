@@ -686,6 +686,18 @@ function OddlingDisplayService.GetDisplayedCount(player: Player, speciesId: stri
 	return OddlingDisplayService.GetDisplayedCounts(player)[speciesId] or 0
 end
 
+-- Requests the normal derived-display reconciliation without granting ownership
+-- or exposing display internals. Studio tooling uses this to recover presentation
+-- from authoritative state, exactly as ordinary state notifications do.
+function OddlingDisplayService.Reconcile(player: Player): boolean
+	if not started or player.Parent ~= Players or not PlayerStateService.HasState(player) then
+		return false
+	end
+
+	queueReconcile(player)
+	return true
+end
+
 -- Starts after PlayerStateService and WorkshopService. State changes reconcile
 -- derived visuals; player removal cleans only that player's runtime container.
 function OddlingDisplayService.Start()

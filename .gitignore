@@ -8,6 +8,10 @@
 
 sourcemap.json
 
+# Wally installs reproducible dependencies here from wally.lock.
+/Packages/
+/ServerPackages/
+
 # Blender backup files; canonical .blend source files remain tracked via Git LFS.
 *.blend1
 *.blend2

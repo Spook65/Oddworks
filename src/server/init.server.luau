@@ -84,6 +84,13 @@ end
 
 local WorkshopUpgradeService = require(workshopUpgradeServiceModule)
 
+local devHarnessServiceModule = Services:WaitForChild("DevHarnessService")
+if not devHarnessServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.DevHarnessService must be a ModuleScript.")
+end
+
+local DevHarnessService = require(devHarnessServiceModule)
+
 -- The server verifies that the persistent world exists instead of creating it
 -- here so Studio/Rojo remain the source of truth for this static bootstrap map.
 local function requireChildOfClass(parent: Instance, childName: string, expectedClassName: string): Instance
@@ -125,5 +132,8 @@ HypeService.Start()
 WorkshopUpgradeService.Start()
 SalvageService.Start()
 CraftingService.Start()
+-- Developer tooling starts last so its commands can call fully initialized
+-- production APIs. Its own server-side gate keeps it inert outside Studio.
+DevHarnessService.Start()
 
 print(string.format("[%s][Server] Production bootstrap ready (v%s)", GameConstants.PROJECT_NAME, GameConstants.VERTICAL_SLICE_VERSION))

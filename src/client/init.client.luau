@@ -34,9 +34,19 @@ end
 
 local CraftingController = require(craftingControllerModule)
 
+local devConsoleControllerModule = Controllers:WaitForChild("DevConsoleController")
+if not devConsoleControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.DevConsoleController must be a ModuleScript.")
+end
+
+local DevConsoleController = require(devConsoleControllerModule)
+
 -- The client remains presentation-only: it starts a HUD that displays sanitized
 -- server snapshots, but it does not own or mutate authoritative gameplay state.
 HudController.Start()
 CraftingController.Start()
+-- The controller exits immediately outside Studio; the server remains the
+-- actual authorization boundary even when the development UI is visible.
+DevConsoleController.Start()
 
 print(string.format("[%s][Client] Production bootstrap ready (v%s)", GameConstants.PROJECT_NAME, GameConstants.VERTICAL_SLICE_VERSION))
