@@ -65,6 +65,8 @@ local pendingReconciliations: { [Player]: boolean } = {}
 local capacityWarningKeys: { [Player]: string } = {}
 local missingSlotWarnings: { [string]: boolean } = {}
 local missingTemplateWarnings: { [string]: boolean } = {}
+local playerContainerConnections: { [Player]: RBXScriptConnection } = {}
+local suppressContainerRecovery: { [Player]: boolean } = {}
 local started = false
 
 -- Creates only temporary runtime organization folders. Persistent plot geometry
@@ -393,6 +395,23 @@ local function getPlayerContainerName(player: Player): string
 	return string.format("Player_%d", player.UserId)
 end
 
+-- Watches one derived container for manual/runtime display removal. Recovery is
+-- queued through ordinary reconciliation, so ownership remains the only truth.
+local function watchPlayerContainer(player: Player, container: Folder)
+	local existingConnection = playerContainerConnections[player]
+	if existingConnection then
+		existingConnection:Disconnect()
+	end
+
+	playerContainerConnections[player] = container.ChildRemoved:Connect(function(child: Instance)
+		if child:IsA("Model") and not suppressContainerRecovery[player] then
+			task.defer(function()
+				OddlingDisplayService.Reconcile(player)
+			end)
+		end
+	end)
+end
+
 local function getOrCreatePlayerContainer(player: Player): Folder?
 	local displaysFolder = runtimeDisplaysFolder
 	if not displaysFolder then
@@ -403,6 +422,7 @@ local function getOrCreatePlayerContainer(player: Player): Folder?
 	local existing = displaysFolder:FindFirstChild(containerName)
 	if existing then
 		if existing:IsA("Folder") then
+			watchPlayerContainer(player, existing)
 			return existing
 		end
 		warn(string.format("[ODDWORKS][OddlingDisplay] Runtime container %s must be a Folder.", containerName))
@@ -413,6 +433,7 @@ local function getOrCreatePlayerContainer(player: Player): Folder?
 	container.Name = containerName
 	container:SetAttribute("OwnerUserId", player.UserId)
 	container.Parent = displaysFolder
+	watchPlayerContainer(player, container)
 	return container
 end
 
@@ -425,7 +446,15 @@ local function cleanupPlayerDisplays(player: Player)
 
 	local container = displaysFolder:FindFirstChild(getPlayerContainerName(player))
 	if container then
+		suppressContainerRecovery[player] = true
 		container:Destroy()
+		suppressContainerRecovery[player] = nil
+	end
+
+	local connection = playerContainerConnections[player]
+	if connection then
+		connection:Disconnect()
+		playerContainerConnections[player] = nil
 	end
 end
 
@@ -718,6 +747,46 @@ function OddlingDisplayService.Start()
 	runtimeDisplaysFolder = displaysFolder
 	started = true
 
+	-- Deleting a player's whole derived container is recoverable. The stable
+	-- OwnerUserId attribute resolves the authoritative player without global state.
+	displaysFolder.ChildRemoved:Connect(function(child: Instance)
+		if not child:IsA("Folder") then
+			return
+		end
+
+		local ownerUserId = child:GetAttribute("OwnerUserId")
+		if typeof(ownerUserId) ~= "number" then
+			return
+		end
+
+		local player = Players:GetPlayerByUserId(ownerUserId)
+		if player and not suppressContainerRecovery[player] then
+			local connection = playerContainerConnections[player]
+			if connection then
+				connection:Disconnect()
+				playerContainerConnections[player] = nil
+			end
+			queueReconcile(player)
+		end
+	end)
+
+	-- Runtime template removal/restoration is presentation failure only. Re-running
+	-- normal reconciliation lets existing ownership disappear/recover visually.
+	local assets = ServerStorage:FindFirstChild("ODDWORKSAssets")
+	local templatesFolder = if assets then assets:FindFirstChild("Oddlings") else nil
+	if templatesFolder then
+		templatesFolder.ChildAdded:Connect(function()
+			for _, player in ipairs(Players:GetPlayers()) do
+				queueReconcile(player)
+			end
+		end)
+		templatesFolder.ChildRemoved:Connect(function()
+			for _, player in ipairs(Players:GetPlayers()) do
+				queueReconcile(player)
+			end
+		end)
+	end
+
 	for _, definition in ipairs(Oddlings.GetAllDefinitions()) do
 		discoverTemplate(definition.SpeciesId)
 	end
@@ -730,6 +799,7 @@ function OddlingDisplayService.Start()
 		pendingReconciliations[player] = nil
 		capacityWarningKeys[player] = nil
 		cleanupPlayerDisplays(player)
+		suppressContainerRecovery[player] = nil
 	end)
 
 	for _, player in ipairs(Players:GetPlayers()) do

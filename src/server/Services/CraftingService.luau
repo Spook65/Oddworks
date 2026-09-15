@@ -187,6 +187,12 @@ end
 -- Handles the client request as an untrusted recipe request.
 -- Roblox supplies the Player; the client only supplies the bounded recipeId string.
 local function handleCraftRequest(player: Player, ...: any)
+	-- A packet queued during disconnect must not mutate state that is already
+	-- leaving this server, even if PlayerRemoving cleanup has not run yet.
+	if player.Parent ~= Players then
+		return
+	end
+
 	if not passesCraftThrottle(player) then
 		sendCraftResult(player, RESULT_RATE_LIMITED)
 		return

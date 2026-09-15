@@ -51,6 +51,7 @@ local PlayerStateService = {}
 local STARTING_RECIPE_ID = "Toastmarshal"
 local MAX_OWNED_ODDLING_ID_LENGTH = 64
 local MAX_RECIPE_ID_LENGTH = 48
+local MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 -- This table is intentionally server-private. Future clients may receive
 -- sanitized copies, but they must never own the authoritative progression data.
@@ -77,7 +78,7 @@ local function isPositiveFiniteInteger(amount: number): boolean
 		return false
 	end
 
-	return amount > 0 and math.floor(amount) == amount
+	return amount > 0 and amount <= MAX_SAFE_INTEGER and math.floor(amount) == amount
 end
 
 -- Loaded balances and ownership counts may legitimately be zero, but must
@@ -91,7 +92,13 @@ local function isNonNegativeFiniteInteger(value: number): boolean
 		return false
 	end
 
-	return value >= 0 and math.floor(value) == value
+	return value >= 0 and value <= MAX_SAFE_INTEGER and math.floor(value) == value
+end
+
+-- Checks the result before addition so valid operands cannot cross Luau's exact
+-- integer range and silently lose economy precision.
+local function canAddWithoutOverflow(currentValue: number, amount: number): boolean
+	return currentValue <= MAX_SAFE_INTEGER - amount
 end
 
 -- Validates species/recipe-style IDs that are used as dictionary keys.
@@ -264,7 +271,7 @@ function PlayerStateService.AddScrap(player: Player, amount: number): boolean
 		return false
 	end
 
-	if not isPositiveFiniteInteger(amount) then
+	if not isPositiveFiniteInteger(amount) or not canAddWithoutOverflow(state.Scrap, amount) then
 		return false
 	end
 
@@ -281,7 +288,7 @@ function PlayerStateService.AddHype(player: Player, amount: number): boolean
 		return false
 	end
 
-	if not isPositiveFiniteInteger(amount) then
+	if not isPositiveFiniteInteger(amount) or not canAddWithoutOverflow(state.Hype, amount) then
 		return false
 	end
 
@@ -433,7 +440,7 @@ function PlayerStateService.AddOwnedOddling(player: Player, speciesId: string, a
 		return false
 	end
 
-	if not isBoundedIdentifier(speciesId, MAX_OWNED_ODDLING_ID_LENGTH) then
+	if not isBoundedIdentifier(speciesId, MAX_OWNED_ODDLING_ID_LENGTH) or not Oddlings.GetDefinition(speciesId) then
 		return false
 	end
 
@@ -442,6 +449,10 @@ function PlayerStateService.AddOwnedOddling(player: Player, speciesId: string, a
 	end
 
 	local currentCount = state.OwnedOddlings[speciesId] or 0
+	if not canAddWithoutOverflow(currentCount, amount) then
+		return false
+	end
+
 	state.OwnedOddlings[speciesId] = currentCount + amount
 	notifyStateChanged(player)
 	return true
