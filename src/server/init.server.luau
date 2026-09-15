@@ -28,6 +28,13 @@ end
 
 local PlayerStateService = require(playerStateServiceModule)
 
+local persistenceServiceModule = Services:WaitForChild("PersistenceService")
+if not persistenceServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.PersistenceService must be a ModuleScript.")
+end
+
+local PersistenceService = require(persistenceServiceModule)
+
 local progressionServiceModule = Services:WaitForChild("ProgressionService")
 if not progressionServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.ProgressionService must be a ModuleScript.")
@@ -132,6 +139,9 @@ HypeService.Start()
 WorkshopUpgradeService.Start()
 SalvageService.Start()
 CraftingService.Start()
+-- Persistence starts after every state consumer has registered its listeners.
+-- PlayerState remains absent until a profile session has loaded successfully.
+PersistenceService.Start()
 -- Developer tooling starts last so its commands can call fully initialized
 -- production APIs. Its own server-side gate keeps it inert outside Studio.
 DevHarnessService.Start()

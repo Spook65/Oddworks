@@ -20,6 +20,13 @@ end
 
 local Recipes = require(recipesModule)
 
+local oddlingsModule = Config:WaitForChild("Oddlings")
+if not oddlingsModule:IsA("ModuleScript") then
+	error("[ODDWORKS][PlayerState] Server.Config.Oddlings must be a ModuleScript.")
+end
+
+local Oddlings = require(oddlingsModule)
+
 export type OddlingCounts = { [string]: number }
 export type RecipeUnlocks = { [string]: boolean }
 
@@ -30,6 +37,13 @@ export type PlayerState = {
 	AssignedPlotId: string?,
 	OwnedOddlings: OddlingCounts,
 	UnlockedRecipes: RecipeUnlocks,
+}
+
+export type InitialPlayerState = {
+	Scrap: number,
+	Hype: number,
+	WorkshopLevel: number,
+	OwnedOddlings: OddlingCounts,
 }
 
 local PlayerStateService = {}
@@ -66,21 +80,71 @@ local function isPositiveFiniteInteger(amount: number): boolean
 	return amount > 0 and math.floor(amount) == amount
 end
 
+-- Loaded balances and ownership counts may legitimately be zero, but must
+-- still be finite whole numbers before becoming authoritative session state.
+local function isNonNegativeFiniteInteger(value: number): boolean
+	if typeof(value) ~= "number" then
+		return false
+	end
+
+	if value ~= value or value == math.huge or value == -math.huge then
+		return false
+	end
+
+	return value >= 0 and math.floor(value) == value
+end
+
 -- Validates species/recipe-style IDs that are used as dictionary keys.
 -- Bounds avoid accepting giant strings into server-owned state by accident.
 local function isBoundedIdentifier(id: string, maxLength: number): boolean
 	return typeof(id) == "string" and #id > 0 and #id <= maxLength
 end
 
--- Creates a brand-new state object so each player gets separate nested tables.
--- Reusing table references here would let one player's Oddlings/unlocks leak into another player's state.
-local function createInitialPlayerState(): PlayerState
+-- Builds configured zero-count ownership so new players and loaded players have
+-- separate, predictable species maps without sharing the save payload table.
+local function createDefaultOddlingCounts(): OddlingCounts
+	local counts: OddlingCounts = {}
+	for _, definition in ipairs(Oddlings.GetAllDefinitions()) do
+		counts[definition.SpeciesId] = 0
+	end
+	return counts
+end
+
+-- Creates a brand-new state object from validated loaded values. AssignedPlotId
+-- and recipe unlocks intentionally begin as session/derived state.
+local function createPlayerState(initialState: InitialPlayerState?): PlayerState?
+	local ownedOddlings = createDefaultOddlingCounts()
+	local scrap = 0
+	local hype = 0
+	local workshopLevel = 1
+
+	if initialState then
+		if not isNonNegativeFiniteInteger(initialState.Scrap)
+			or not isNonNegativeFiniteInteger(initialState.Hype)
+			or not isPositiveFiniteInteger(initialState.WorkshopLevel)
+			or not WorkshopLevels.GetDefinition(initialState.WorkshopLevel)
+			or typeof(initialState.OwnedOddlings) ~= "table"
+		then
+			return nil
+		end
+
+		scrap = initialState.Scrap
+		hype = initialState.Hype
+		workshopLevel = initialState.WorkshopLevel
+		for speciesId, count in pairs(initialState.OwnedOddlings) do
+			if not Oddlings.GetDefinition(speciesId) or not isNonNegativeFiniteInteger(count) then
+				return nil
+			end
+			ownedOddlings[speciesId] = count
+		end
+	end
+
 	return {
-		Scrap = 0,
-		Hype = 0,
-		WorkshopLevel = 1,
+		Scrap = scrap,
+		Hype = hype,
+		WorkshopLevel = workshopLevel,
 		AssignedPlotId = nil,
-		OwnedOddlings = {},
+		OwnedOddlings = ownedOddlings,
 		-- Toastmarshal is server-unlocked from the start for Vertical Slice 0.1.
 		UnlockedRecipes = {
 			[STARTING_RECIPE_ID] = true,
@@ -112,47 +176,45 @@ local function copyRecipeUnlocks(source: RecipeUnlocks): RecipeUnlocks
 	return copy
 end
 
--- PlayerAdded can fire before or after services start depending on Studio/server timing,
--- so initialization is idempotent and refuses to create duplicate state for one Player.
-local function initializePlayer(player: Player)
-	if playerStates[player] then
-		warn(string.format("[ODDWORKS][PlayerState] State already exists for %s (%d).", player.Name, player.UserId))
-		return
-	end
-
-	playerStates[player] = createInitialPlayerState()
-	notifyStateChanged(player)
-	print(string.format("[ODDWORKS][PlayerState] Created session state for %s (%d).", player.Name, player.UserId))
-end
-
--- PlayerRemoving cleanup prevents stale server-memory state from surviving after a player leaves.
--- This pass is session-only, so there is intentionally no DataStore save here.
-local function removePlayer(player: Player)
-	if not playerStates[player] then
-		return
-	end
-
-	playerStates[player] = nil
-	print(string.format("[ODDWORKS][PlayerState] Cleaned up session state for %s (%d).", player.Name, player.UserId))
-end
-
--- Starts the server-owned player lifecycle once and initializes any players already present.
--- The server, not the client, is responsible for creating authoritative gameplay state.
+-- Starts the state container without creating temporary defaults. PersistenceService
+-- is the readiness gate and initializes each player only after a profile session loads.
 function PlayerStateService.Start()
 	if started then
 		return
 	end
 
 	started = true
+	print("[ODDWORKS][PlayerState] Service started; awaiting persistence initialization.")
+end
 
-	Players.PlayerAdded:Connect(initializePlayer)
-	Players.PlayerRemoving:Connect(removePlayer)
-
-	for _, player in ipairs(Players:GetPlayers()) do
-		initializePlayer(player)
+-- Establishes exactly one authoritative state after persistence has validated
+-- and copied its data. A caller cannot retain references to nested state tables.
+function PlayerStateService.InitializePlayer(player: Player, initialState: InitialPlayerState?): boolean
+	if not started or player.Parent ~= Players or playerStates[player] then
+		return false
 	end
 
-	print("[ODDWORKS][PlayerState] Service started.")
+	local state = createPlayerState(initialState)
+	if not state then
+		return false
+	end
+
+	playerStates[player] = state
+	notifyStateChanged(player)
+	print(string.format("[ODDWORKS][PlayerState] Initialized authoritative state for %s (%d).", player.Name, player.UserId))
+	return true
+end
+
+-- Removes only this player's in-memory gameplay state after persistence has
+-- synchronized and ended its profile session, or immediately after session loss.
+function PlayerStateService.RemovePlayerState(player: Player): boolean
+	if not playerStates[player] then
+		return false
+	end
+
+	playerStates[player] = nil
+	print(string.format("[ODDWORKS][PlayerState] Removed session state for %s (%d).", player.Name, player.UserId))
+	return true
 end
 
 -- Reports whether this server has session state for the given Player without exposing the state itself.
