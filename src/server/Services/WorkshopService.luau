@@ -16,8 +16,6 @@ local EXPECTED_PLOT_IDS = {
 	"Plot02",
 }
 
-local PLAYER_STATE_WAIT_SECONDS = 5
-
 local WorkshopService = {}
 
 -- WorkshopService is the server authority for live plot occupancy.
@@ -119,30 +117,12 @@ local function assignPlayer(player: Player): boolean
 	return true
 end
 
--- Waits briefly for PlayerStateService when join events arrive in an unexpected order.
--- This avoids split authority without letting WorkshopService create or mutate PlayerState directly.
+-- Assigns immediately when state is ready. Persistence may yield during profile
+-- loading, so the state-change observer below is the durable readiness signal.
 local function assignPlayerWhenStateReady(player: Player)
 	if PlayerStateService.HasState(player) then
 		assignPlayer(player)
-		return
 	end
-
-	task.spawn(function()
-		local startTime = os.clock()
-
-		while player.Parent == Players and not PlayerStateService.HasState(player) do
-			if os.clock() - startTime >= PLAYER_STATE_WAIT_SECONDS then
-				warn(string.format("[ODDWORKS][WorkshopService] Timed out waiting for PlayerState for %s.", player.Name))
-				return
-			end
-
-			task.wait(0.1)
-		end
-
-		if player.Parent == Players then
-			assignPlayer(player)
-		end
-	end)
 end
 
 -- Releases only the departing player's plot and leaves every other assignment intact.
@@ -176,6 +156,11 @@ function WorkshopService.Start()
 
 	Players.PlayerAdded:Connect(assignPlayerWhenStateReady)
 	Players.PlayerRemoving:Connect(releasePlayer)
+	PlayerStateService.ObserveStateChanged(function(player: Player)
+		if playerPlotIds[player] == nil then
+			assignPlayerWhenStateReady(player)
+		end
+	end)
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		assignPlayerWhenStateReady(player)

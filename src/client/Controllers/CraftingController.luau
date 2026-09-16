@@ -2,6 +2,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HudController = require(script.Parent:WaitForChild("HudController"))
 
 type CraftResultCode =
 	"CRAFT_SUCCESS"
@@ -13,12 +14,14 @@ type CraftResultCode =
 	| "CRAFT_FAILED"
 
 local TOASTMARSHAL_RECIPE_ID = "Toastmarshal"
+local CONEJURER_RECIPE_ID = "Conejurer"
+local CONEJURER_REQUIRED_WORKSHOP_LEVEL = 2
 
 local RESULT_MESSAGES: { [string]: string } = {
-	CRAFT_SUCCESS = "Crafted Toastmarshal.",
-	NOT_ENOUGH_SCRAP = "Need 5 Scrap.",
+	CRAFT_SUCCESS = "Craft succeeded.",
+	NOT_ENOUGH_SCRAP = "Not enough Scrap.",
 	RECIPE_LOCKED = "Recipe locked.",
-	RECIPE_NOT_AVAILABLE = "Conejurer is coming soon.",
+	RECIPE_NOT_AVAILABLE = "Recipe unavailable.",
 	INVALID_RECIPE = "Invalid recipe.",
 	RATE_LIMITED = "Slow down.",
 	CRAFT_FAILED = "Craft failed.",
@@ -48,29 +51,53 @@ local function requireChildOfClass(parent: Instance, childName: string, expected
 	return child
 end
 
--- Creates the small temporary crafting button and result label.
--- The displayed "5 Scrap" is presentation; the server recipe config is the real price.
-local function createCraftingUi(): (TextButton, TextLabel)
+-- Creates one temporary crafting button. Its displayed price is presentation;
+-- the server recipe configuration remains the only authoritative price.
+local function createCraftButton(
+	parent: ScreenGui,
+	name: string,
+	position: UDim2,
+	text: string
+): TextButton
+	local button = Instance.new("TextButton")
+	button.Name = name
+	button.Position = position
+	button.Size = UDim2.fromOffset(250, 42)
+	button.BackgroundColor3 = Color3.fromRGB(62, 88, 98)
+	button.BorderSizePixel = 0
+	button.Font = Enum.Font.GothamBold
+	button.Text = text
+	button.TextColor3 = Color3.fromRGB(250, 246, 232)
+	button.TextSize = 18
+	button.Parent = parent
+	return button
+end
+
+-- Creates two temporary recipe buttons and one shared result label.
+-- Their displayed prices aid presentation only; server Recipes decides every real cost and output.
+local function createCraftingUi(): (TextButton, TextButton, TextLabel)
 	local player = Players.LocalPlayer
 	local playerGui = player:WaitForChild("PlayerGui")
 	local hud = requireChildOfClass(playerGui, "ODDWORKSHud", "ScreenGui")
 
-	local craftButton = Instance.new("TextButton")
-	craftButton.Name = "CraftToastmarshalButton"
-	craftButton.Position = UDim2.fromOffset(16, 66)
-	craftButton.Size = UDim2.fromOffset(250, 42)
-	craftButton.BackgroundColor3 = Color3.fromRGB(62, 88, 98)
-	craftButton.BorderSizePixel = 0
-	craftButton.Font = Enum.Font.GothamBold
-	craftButton.Text = "Craft Toastmarshal - 5 Scrap"
-	craftButton.TextColor3 = Color3.fromRGB(250, 246, 232)
-	craftButton.TextSize = 18
-	craftButton.Parent = hud
+	local toastmarshalButton = createCraftButton(
+		hud,
+		"CraftToastmarshalButton",
+		UDim2.fromOffset(16, 66),
+		"Craft Toastmarshal - 5 Scrap"
+	)
+	local conejurerButton = createCraftButton(
+		hud,
+		"CraftConejurerButton",
+		UDim2.fromOffset(276, 66),
+		"Craft Conejurer - 8 Scrap"
+	)
+	conejurerButton.Visible = false
 
 	local resultLabel = Instance.new("TextLabel")
 	resultLabel.Name = "CraftResultLabel"
 	resultLabel.Position = UDim2.fromOffset(16, 112)
-	resultLabel.Size = UDim2.fromOffset(250, 30)
+	resultLabel.Size = UDim2.fromOffset(510, 30)
 	resultLabel.BackgroundTransparency = 1
 	resultLabel.Font = Enum.Font.Gotham
 	resultLabel.Text = ""
@@ -79,7 +106,7 @@ local function createCraftingUi(): (TextButton, TextLabel)
 	resultLabel.TextXAlignment = Enum.TextXAlignment.Left
 	resultLabel.Parent = hud
 
-	return craftButton, resultLabel
+	return toastmarshalButton, conejurerButton, resultLabel
 end
 
 -- Converts a server-generated result code into local display text.
@@ -109,10 +136,19 @@ function CraftingController.Start()
 	local networkFolder = requireChildOfClass(ReplicatedStorage, "ODDWORKSNetwork", "Folder")
 	local craftRequest = requireChildOfClass(networkFolder, "CraftRequest", "RemoteEvent") :: RemoteEvent
 	local craftResult = requireChildOfClass(networkFolder, "CraftResult", "RemoteEvent") :: RemoteEvent
-	local craftButton, resultLabel = createCraftingUi()
+	local toastmarshalButton, conejurerButton, resultLabel = createCraftingUi()
 
-	craftButton.Activated:Connect(function()
+	toastmarshalButton.Activated:Connect(function()
 		craftRequest:FireServer(TOASTMARSHAL_RECIPE_ID)
+	end)
+	conejurerButton.Activated:Connect(function()
+		craftRequest:FireServer(CONEJURER_RECIPE_ID)
+	end)
+
+	HudController.ObserveWorkshopLevelChanged(function(workshopLevel: number)
+		-- Visibility is convenience only. Showing this button locally at Level 1
+		-- cannot bypass the server-owned unlock and level requirement.
+		conejurerButton.Visible = workshopLevel >= CONEJURER_REQUIRED_WORKSHOP_LEVEL
 	end)
 
 	craftResult.OnClientEvent:Connect(function(resultCode: any)

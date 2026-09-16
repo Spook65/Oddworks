@@ -1,0 +1,10 @@
+[package]
+name = "bhann/oddworks"
+description = "Dependencies for the ODDWORKS Roblox experience."
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[server-dependencies]
+Cmdr = "evaera/cmdr@1.13.0"
+ProfileStore = "lm-loleris/profilestore@1.0.3"

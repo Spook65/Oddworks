@@ -10,16 +10,27 @@ local Config = ServerRoot:WaitForChild("Config")
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
 local WorkshopService = require(Services:WaitForChild("WorkshopService"))
 
+local oddlingsModule = Config:WaitForChild("Oddlings")
+if not oddlingsModule:IsA("ModuleScript") then
+	error("[ODDWORKS][OddlingDisplay] Server.Config.Oddlings must be a ModuleScript.")
+end
+
 local workshopLevelsModule = Config:WaitForChild("WorkshopLevels")
 if not workshopLevelsModule:IsA("ModuleScript") then
 	error("[ODDWORKS][OddlingDisplay] Server.Config.WorkshopLevels must be a ModuleScript.")
 end
 
+local Oddlings = require(oddlingsModule)
 local WorkshopLevels = require(workshopLevelsModule)
 
-type DisplaySlot = {
-	Name: string,
-	WorldCFrame: CFrame,
+type OddlingDefinition = {
+	SpeciesId: string,
+	TemplateName: string,
+	RootPartName: string,
+	AnchorAllParts: boolean,
+	IdleAnimationAssetId: string?,
+	HypePerInterval: number,
+	HypeIntervalSeconds: number,
 }
 
 type WorkshopLevelDefinition = {
@@ -29,28 +40,37 @@ type WorkshopLevelDefinition = {
 	NextLevel: number?,
 }
 
-local TEMPLATE_PATH = "ServerStorage.ODDWORKSAssets.Oddlings.Toastmarshal_Common"
-local TEMPLATE_NAME = "Toastmarshal_Common"
-local SPECIES_ID = "Toastmarshal"
-local IDLE_ANIMATION_ID = "rbxassetid://105040634265875"
+type DisplaySlot = {
+	Name: string,
+	WorldCFrame: CFrame,
+}
+
+type DisplayAllocation = {
+	SlotIndex: number,
+	SpeciesId: string,
+	SpeciesDisplayIndex: number,
+}
+
 local DISPLAY_SLOTS_FOLDER_NAME = "OddlingDisplaySlots"
 local RUNTIME_FOLDER_NAME = "ODDWORKSRuntime"
 local DISPLAYS_FOLDER_NAME = "OddlingDisplays"
 
 local OddlingDisplayService = {}
 
--- Runtime display bookkeeping stays server-only. Workspace clones are presentation
--- derived from PlayerState; neither their attributes nor their existence owns gameplay truth.
+-- Template and display bookkeeping stays private on the server. Physical clones
+-- are disposable presentation derived from PlayerState and workshop state.
 local runtimeDisplaysFolder: Folder? = nil
-local cachedTemplate: Model? = nil
+local cachedTemplates: { [string]: Model } = {}
 local pendingReconciliations: { [Player]: boolean } = {}
 local capacityWarningKeys: { [Player]: string } = {}
 local missingSlotWarnings: { [string]: boolean } = {}
-local warnedMissingTemplate = false
+local missingTemplateWarnings: { [string]: boolean } = {}
+local playerContainerConnections: { [Player]: RBXScriptConnection } = {}
+local suppressContainerRecovery: { [Player]: boolean } = {}
 local started = false
 
--- Creates only the runtime organization folders needed for temporary displays.
--- Persistent workshop geometry remains authored through Studio/Rojo under ODDWORKSWorld.
+-- Creates only temporary runtime organization folders. Persistent plot geometry
+-- remains authored through the repository-backed world hierarchy.
 local function getOrCreateFolder(parent: Instance, childName: string): Folder?
 	local existing = parent:FindFirstChild(childName)
 	if existing then
@@ -68,8 +88,8 @@ local function getOrCreateFolder(parent: Instance, childName: string): Folder?
 	return folder
 end
 
--- Confirms every physical part is connected to RootPart through imported Motor6Ds.
--- Anchoring only RootPart is safe only when the rest of the rig belongs to that assembly.
+-- Confirms each animated rig part is connected to its configured root by Motor6Ds.
+-- Anchoring only that root is safe only when every other part belongs to the assembly.
 local function hasConnectedRigAssembly(model: Model, rootPart: BasePart): boolean
 	local adjacency: { [BasePart]: { BasePart } } = {}
 
@@ -86,9 +106,7 @@ local function hasConnectedRigAssembly(model: Model, rootPart: BasePart): boolea
 		end
 	end
 
-	local visited: { [BasePart]: boolean } = {
-		[rootPart] = true,
-	}
+	local visited: { [BasePart]: boolean } = { [rootPart] = true }
 	local queue: { BasePart } = { rootPart }
 	local queueIndex = 1
 
@@ -113,88 +131,116 @@ local function hasConnectedRigAssembly(model: Model, rootPart: BasePart): boolea
 	return true
 end
 
--- Validates the imported production contract without repairing or restructuring the rig.
--- A malformed visual template must fail independently from authoritative ownership.
-local function validateTemplate(candidate: Instance): Model?
+-- Rejects executable content from runtime art templates. The prototype is visual
+-- content only and must never smuggle third-party behavior into the live server.
+local function containsExecutableContent(model: Model): boolean
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("LuaSourceContainer") then
+			return true
+		end
+	end
+
+	return false
+end
+
+-- Validates the minimum contract for either an animated production rig or a
+-- static prototype without silently repairing artistic hierarchy.
+local function validateTemplate(candidate: Instance, definition: OddlingDefinition): Model?
+	local templatePath = string.format("ServerStorage.ODDWORKSAssets.Oddlings.%s", definition.TemplateName)
 	if not candidate:IsA("Model") then
-		warn(string.format("[ODDWORKS][OddlingDisplay] %s must be a Model.", TEMPLATE_PATH))
+		warn(string.format("[ODDWORKS][OddlingDisplay] %s must be a Model.", templatePath))
 		return nil
 	end
 
-	local rootPart = candidate:FindFirstChild("RootPart", true)
+	if containsExecutableContent(candidate) then
+		warn(string.format("[ODDWORKS][OddlingDisplay] %s contains executable scripts and was rejected.", templatePath))
+		return nil
+	end
+
+	local rootPart = candidate:FindFirstChild(definition.RootPartName, true)
 	if not rootPart or not rootPart:IsA("BasePart") then
-		warn(string.format("[ODDWORKS][OddlingDisplay] %s is missing a BasePart named RootPart.", TEMPLATE_PATH))
+		warn(string.format("[ODDWORKS][OddlingDisplay] %s is missing BasePart %s.", templatePath, definition.RootPartName))
 		return nil
 	end
 
-	if not candidate:FindFirstChildWhichIsA("MeshPart", true) then
-		warn(string.format("[ODDWORKS][OddlingDisplay] %s contains no production MeshParts.", TEMPLATE_PATH))
+	if not candidate:FindFirstChildWhichIsA("BasePart", true) then
+		warn(string.format("[ODDWORKS][OddlingDisplay] %s contains no visible BaseParts.", templatePath))
 		return nil
 	end
 
-	if not candidate:FindFirstChildWhichIsA("Bone", true) then
-		warn(string.format("[ODDWORKS][OddlingDisplay] %s contains no Bone hierarchy.", TEMPLATE_PATH))
-		return nil
-	end
+	if definition.IdleAnimationAssetId then
+		if not candidate:FindFirstChildWhichIsA("MeshPart", true) then
+			warn(string.format("[ODDWORKS][OddlingDisplay] %s contains no production MeshParts.", templatePath))
+			return nil
+		end
 
-	if not candidate:FindFirstChildWhichIsA("AnimationController", true) then
-		warn(string.format("[ODDWORKS][OddlingDisplay] %s is missing its AnimationController.", TEMPLATE_PATH))
-		return nil
-	end
+		if not candidate:FindFirstChildWhichIsA("Bone", true) then
+			warn(string.format("[ODDWORKS][OddlingDisplay] %s contains no Bone hierarchy.", templatePath))
+			return nil
+		end
 
-	if not hasConnectedRigAssembly(candidate, rootPart) then
-		warn(string.format("[ODDWORKS][OddlingDisplay] %s has BaseParts disconnected from RootPart.", TEMPLATE_PATH))
-		return nil
+		if not candidate:FindFirstChildWhichIsA("AnimationController", true) then
+			warn(string.format("[ODDWORKS][OddlingDisplay] %s is missing its AnimationController.", templatePath))
+			return nil
+		end
+
+		if not hasConnectedRigAssembly(candidate, rootPart) then
+			warn(string.format("[ODDWORKS][OddlingDisplay] %s has parts disconnected from its root.", templatePath))
+			return nil
+		end
 	end
 
 	return candidate
 end
 
--- Finds the Studio-imported server template by its exact contract path.
--- No cloud fallback is used because arbitrary fetched assets are not trusted production content.
-local function discoverTemplate(): Model?
-	if cachedTemplate and cachedTemplate.Parent then
-		return cachedTemplate
+-- Resolves one configured template by its exact server-only path. No cloud
+-- fallback or placeholder is used when repository-backed runtime art is missing.
+local function discoverTemplate(speciesId: string): Model?
+	local definition = Oddlings.GetDefinition(speciesId) :: OddlingDefinition?
+	if not definition then
+		return nil
 	end
-
-	cachedTemplate = nil
 
 	local assets = ServerStorage:FindFirstChild("ODDWORKSAssets")
 	local oddlings = if assets then assets:FindFirstChild("Oddlings") else nil
-	local candidate = if oddlings then oddlings:FindFirstChild(TEMPLATE_NAME) else nil
+	local candidate = if oddlings then oddlings:FindFirstChild(definition.TemplateName) else nil
+	local cached = cachedTemplates[speciesId]
+	if cached and candidate == cached then
+		return cached
+	end
+	cachedTemplates[speciesId] = nil
 
 	if not candidate then
-		if not warnedMissingTemplate then
-			warn(string.format("[ODDWORKS][OddlingDisplay] Missing runtime template: %s", TEMPLATE_PATH))
-			warnedMissingTemplate = true
+		if not missingTemplateWarnings[speciesId] then
+			warn(
+				string.format(
+					"[ODDWORKS][OddlingDisplay] Missing runtime template: ServerStorage.ODDWORKSAssets.Oddlings.%s",
+					definition.TemplateName
+				)
+			)
+			missingTemplateWarnings[speciesId] = true
 		end
 		return nil
 	end
 
-	local template = validateTemplate(candidate)
+	local template = validateTemplate(candidate, definition)
 	if not template then
 		return nil
 	end
 
-	cachedTemplate = template
-	warnedMissingTemplate = false
-	print(string.format("[ODDWORKS][OddlingDisplay] Template ready: %s", TEMPLATE_PATH))
+	cachedTemplates[speciesId] = template
+	missingTemplateWarnings[speciesId] = nil
+	print(string.format("[ODDWORKS][OddlingDisplay] Template ready: %s", definition.TemplateName))
 	return template
 end
 
--- Reads authored display contacts in stable name order.
--- Slots are server-known world objects, so clients never provide positions or capacity.
+-- Reads authored display contacts in stable name order. Clients never provide
+-- slot positions, ordering, or workshop capacity.
 local function discoverDisplaySlots(plot: BasePart, plotId: string): { DisplaySlot }
 	local slotsFolder = plot:FindFirstChild(DISPLAY_SLOTS_FOLDER_NAME)
 	if not slotsFolder or not slotsFolder:IsA("Folder") then
 		if not missingSlotWarnings[plotId] then
-			warn(
-				string.format(
-					"[ODDWORKS][OddlingDisplay] %s is missing a Folder named %s.",
-					plot:GetFullName(),
-					DISPLAY_SLOTS_FOLDER_NAME
-				)
-			)
+			warn(string.format("[ODDWORKS][OddlingDisplay] %s is missing %s.", plot:GetFullName(), DISPLAY_SLOTS_FOLDER_NAME))
 			missingSlotWarnings[plotId] = true
 		end
 		return {}
@@ -204,15 +250,9 @@ local function discoverDisplaySlots(plot: BasePart, plotId: string): { DisplaySl
 	for _, child in ipairs(slotsFolder:GetChildren()) do
 		if string.match(child.Name, "^Slot%d+$") then
 			if child:IsA("Attachment") then
-				table.insert(slots, {
-					Name = child.Name,
-					WorldCFrame = child.WorldCFrame,
-				})
+				table.insert(slots, { Name = child.Name, WorldCFrame = child.WorldCFrame })
 			elseif child:IsA("BasePart") then
-				table.insert(slots, {
-					Name = child.Name,
-					WorldCFrame = child.CFrame,
-				})
+				table.insert(slots, { Name = child.Name, WorldCFrame = child.CFrame })
 			end
 		end
 	end
@@ -225,13 +265,13 @@ local function discoverDisplaySlots(plot: BasePart, plotId: string): { DisplaySl
 	return slots
 end
 
--- Uses only the visible production meshes to find the intended ground contact.
--- The imported invisible RootPart extends below Toastmarshal's feet and would create a false air gap.
-local function getVisibleMeshBottomY(model: Model): number?
+-- Measures the lowest corner of visible parts after pivot placement. This works
+-- for both MeshParts and primitive prototype Parts without guessed Y offsets.
+local function getVisiblePartBottomY(model: Model): number?
 	local bottomY: number? = nil
 
 	for _, descendant in ipairs(model:GetDescendants()) do
-		if descendant:IsA("MeshPart") and descendant.Transparency < 1 then
+		if descendant:IsA("BasePart") and descendant.Transparency < 1 then
 			local halfSize = descendant.Size / 2
 			for xSign = -1, 1, 2 do
 				for ySign = -1, 1, 2 do
@@ -249,28 +289,41 @@ local function getVisibleMeshBottomY(model: Model): number?
 	return bottomY
 end
 
--- Moves the whole imported Model through its pivot, then grounds visible mesh bounds
--- exactly to the authored slot contact plane without a guessed vertical offset.
+-- Moves the whole model with PivotTo, then aligns measured visible bounds to
+-- the authored slot contact plane while preserving internal rig transforms.
 local function placeDisplayAtSlot(model: Model, slot: DisplaySlot): boolean
 	model:PivotTo(slot.WorldCFrame)
 
-	local meshBottomY = getVisibleMeshBottomY(model)
-	if not meshBottomY then
-		warn(string.format("[ODDWORKS][OddlingDisplay] %s has no visible mesh bounds for placement.", model.Name))
+	local partBottomY = getVisiblePartBottomY(model)
+	if not partBottomY then
+		warn(string.format("[ODDWORKS][OddlingDisplay] %s has no visible bounds for placement.", model.Name))
 		return false
 	end
 
-	local verticalCorrection = slot.WorldCFrame.Position.Y - meshBottomY
+	local verticalCorrection = slot.WorldCFrame.Position.Y - partBottomY
 	model:PivotTo(model:GetPivot() + Vector3.new(0, verticalCorrection, 0))
 	return true
 end
 
--- Keeps the imported rig stationary without freezing every animated mesh part.
--- RootPart anchors the Motor6D assembly; all display parts are non-collidable presentation.
-local function configureDisplayPhysics(model: Model): boolean
-	local rootPart = model:FindFirstChild("RootPart", true)
+-- Applies one configured physics policy: an animated rig anchors only its root,
+-- while a static prototype anchors every part. Both remain non-interactive visuals.
+local function configureDisplayPhysics(model: Model, definition: OddlingDefinition): boolean
+	local rootPart = model:FindFirstChild(definition.RootPartName, true)
 	if not rootPart or not rootPart:IsA("BasePart") then
 		return false
+	end
+
+	local humanoid = model:FindFirstChildWhichIsA("Humanoid", true)
+	if humanoid then
+		-- A classic Humanoid state machine may restore limb collision after setup.
+		-- Static displays do not need locomotion, so disabling evaluation keeps the
+		-- prototype inert without deleting the Humanoid that drives CharacterMeshes.
+		if definition.AnchorAllParts then
+			humanoid.EvaluateStateMachine = false
+			humanoid.AutoRotate = false
+		end
+		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+		humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
 	end
 
 	for _, descendant in ipairs(model:GetDescendants()) do
@@ -279,11 +332,11 @@ local function configureDisplayPhysics(model: Model): boolean
 			descendant.CanTouch = false
 			descendant.CanQuery = false
 
-			if descendant == rootPart then
+			if definition.AnchorAllParts then
 				descendant.Anchored = true
 			else
-				descendant.Anchored = false
-				descendant.Massless = true
+				descendant.Anchored = descendant == rootPart
+				descendant.Massless = descendant ~= rootPart
 			end
 		end
 	end
@@ -291,32 +344,34 @@ local function configureDisplayPhysics(model: Model): boolean
 	return true
 end
 
--- Starts the published production Idle on the server-created display.
--- The server owns the animation ID; no client remote can choose or trigger animation playback.
-local function startIdleAnimation(model: Model): boolean
+-- Starts a configured Idle only for species that own a published animation.
+-- Static prototypes with a nil animation ID spawn normally without fake rig setup.
+local function startIdleAnimation(model: Model, definition: OddlingDefinition): boolean
+	local animationAssetId = definition.IdleAnimationAssetId
+	if not animationAssetId then
+		return true
+	end
+
 	if model:GetAttribute("IdleAnimationStarted") == true then
 		return true
 	end
 
-	local controllerInstance = model:FindFirstChildWhichIsA("AnimationController", true)
-	if not controllerInstance or not controllerInstance:IsA("AnimationController") then
+	local controller = model:FindFirstChildWhichIsA("AnimationController", true)
+	if not controller then
 		warn(string.format("[ODDWORKS][OddlingDisplay] %s cannot play Idle: AnimationController missing.", model.Name))
 		return false
 	end
 
-	local animatorInstance = controllerInstance:FindFirstChildWhichIsA("Animator")
-	local animator: Animator
-	if animatorInstance and animatorInstance:IsA("Animator") then
-		animator = animatorInstance
-	else
+	local animator = controller:FindFirstChildWhichIsA("Animator")
+	if not animator then
 		animator = Instance.new("Animator")
-		animator.Parent = controllerInstance
+		animator.Parent = controller
 	end
 
 	local animation = Instance.new("Animation")
 	animation.Name = "Idle"
-	animation.AnimationId = IDLE_ANIMATION_ID
-	animation.Parent = controllerInstance
+	animation.AnimationId = animationAssetId
+	animation.Parent = controller
 
 	local didStart, trackOrError = pcall(function(): AnimationTrack
 		local track = animator:LoadAnimation(animation)
@@ -335,13 +390,28 @@ local function startIdleAnimation(model: Model): boolean
 	return true
 end
 
--- Names each player's temporary display container by public, stable UserId.
--- Separate containers prevent one player's reconciliation from touching another player's models.
+-- Stable UserId containers isolate reconciliation and cleanup between players.
 local function getPlayerContainerName(player: Player): string
 	return string.format("Player_%d", player.UserId)
 end
 
--- Returns an existing player-isolated container or creates one only when a display is needed.
+-- Watches one derived container for manual/runtime display removal. Recovery is
+-- queued through ordinary reconciliation, so ownership remains the only truth.
+local function watchPlayerContainer(player: Player, container: Folder)
+	local existingConnection = playerContainerConnections[player]
+	if existingConnection then
+		existingConnection:Disconnect()
+	end
+
+	playerContainerConnections[player] = container.ChildRemoved:Connect(function(child: Instance)
+		if child:IsA("Model") and not suppressContainerRecovery[player] then
+			task.defer(function()
+				OddlingDisplayService.Reconcile(player)
+			end)
+		end
+	end)
+end
+
 local function getOrCreatePlayerContainer(player: Player): Folder?
 	local displaysFolder = runtimeDisplaysFolder
 	if not displaysFolder then
@@ -352,9 +422,9 @@ local function getOrCreatePlayerContainer(player: Player): Folder?
 	local existing = displaysFolder:FindFirstChild(containerName)
 	if existing then
 		if existing:IsA("Folder") then
+			watchPlayerContainer(player, existing)
 			return existing
 		end
-
 		warn(string.format("[ODDWORKS][OddlingDisplay] Runtime container %s must be a Folder.", containerName))
 		return nil
 	end
@@ -363,11 +433,11 @@ local function getOrCreatePlayerContainer(player: Player): Folder?
 	container.Name = containerName
 	container:SetAttribute("OwnerUserId", player.UserId)
 	container.Parent = displaysFolder
+	watchPlayerContainer(player, container)
 	return container
 end
 
--- Removes all temporary physical representation for one player.
--- Authoritative ownership remains in PlayerStateService and is never changed by visual cleanup.
+-- Display cleanup removes derived visuals only. It never changes authoritative ownership.
 local function cleanupPlayerDisplays(player: Player)
 	local displaysFolder = runtimeDisplaysFolder
 	if not displaysFolder then
@@ -376,23 +446,74 @@ local function cleanupPlayerDisplays(player: Player)
 
 	local container = displaysFolder:FindFirstChild(getPlayerContainerName(player))
 	if container then
+		suppressContainerRecovery[player] = true
 		container:Destroy()
+		suppressContainerRecovery[player] = nil
+	end
+
+	local connection = playerContainerConnections[player]
+	if connection then
+		connection:Disconnect()
+		playerContainerConnections[player] = nil
 	end
 end
 
--- Reads this service's existing Toastmarshal clones by deterministic display index.
--- Duplicate/malformed indexes are removed because this runtime folder is derived presentation only.
+-- Round-robin allocation gives every owned/configured species one slot before
+-- duplicates. Sorted configuration order makes mixed workshops reproducible.
+local function buildDisplayAllocation(ownedOddlings: { [string]: number }, capacity: number): { DisplayAllocation }
+	local definitions = Oddlings.GetAllDefinitions()
+	local remaining: { [string]: number } = {}
+	local speciesDisplayIndexes: { [string]: number } = {}
+	local allocations: { DisplayAllocation } = {}
+
+	for _, definition in ipairs(definitions) do
+		local ownedCount = ownedOddlings[definition.SpeciesId] or 0
+		if ownedCount > 0 and discoverTemplate(definition.SpeciesId) then
+			remaining[definition.SpeciesId] = ownedCount
+			speciesDisplayIndexes[definition.SpeciesId] = 0
+		end
+	end
+
+	while #allocations < capacity do
+		local assignedThisRound = false
+
+		for _, definition in ipairs(definitions) do
+			local speciesId = definition.SpeciesId
+			local remainingCount = remaining[speciesId] or 0
+			if remainingCount > 0 and #allocations < capacity then
+				local speciesDisplayIndex = (speciesDisplayIndexes[speciesId] or 0) + 1
+				speciesDisplayIndexes[speciesId] = speciesDisplayIndex
+				remaining[speciesId] = remainingCount - 1
+				table.insert(allocations, {
+					SlotIndex = #allocations + 1,
+					SpeciesId = speciesId,
+					SpeciesDisplayIndex = speciesDisplayIndex,
+				})
+				assignedThisRound = true
+			end
+		end
+
+		if not assignedThisRound then
+			break
+		end
+	end
+
+	return allocations
+end
+
+-- Existing displays are keyed by total slot index; malformed or duplicate derived
+-- entries are discarded so reconciliation can rebuild them from trusted state.
 local function collectExistingDisplays(container: Folder): { [number]: Model }
-	local displaysByIndex: { [number]: Model } = {}
+	local displaysBySlot: { [number]: Model } = {}
 
 	for _, child in ipairs(container:GetChildren()) do
-		if child:IsA("Model") and child:GetAttribute("OddlingSpeciesId") == SPECIES_ID then
-			local displayIndex = child:GetAttribute("DisplayIndex")
-			if typeof(displayIndex) == "number" and displayIndex > 0 and math.floor(displayIndex) == displayIndex then
-				if displaysByIndex[displayIndex] then
+		if child:IsA("Model") then
+			local slotIndex = child:GetAttribute("DisplaySlotIndex")
+			if typeof(slotIndex) == "number" and slotIndex > 0 and math.floor(slotIndex) == slotIndex then
+				if displaysBySlot[slotIndex] then
 					child:Destroy()
 				else
-					displaysByIndex[displayIndex] = child
+					displaysBySlot[slotIndex] = child
 				end
 			else
 				child:Destroy()
@@ -400,27 +521,35 @@ local function collectExistingDisplays(container: Folder): { [number]: Model }
 		end
 	end
 
-	return displaysByIndex
+	return displaysBySlot
 end
 
--- Clones one validated production template into a deterministic slot.
--- Spawn failure affects presentation only; it never refunds, decrements, or rewrites ownership.
-local function spawnDisplay(player: Player, plotId: string, displayIndex: number, slot: DisplaySlot, container: Folder): Model?
-	local template = discoverTemplate()
-	if not template then
+-- Clones one configured template into an authoritative allocation. Spawn failure
+-- affects presentation only and never refunds or rewrites ownership.
+local function spawnDisplay(
+	player: Player,
+	plotId: string,
+	allocation: DisplayAllocation,
+	slot: DisplaySlot,
+	container: Folder
+): Model?
+	local definition = Oddlings.GetDefinition(allocation.SpeciesId) :: OddlingDefinition?
+	local template = discoverTemplate(allocation.SpeciesId)
+	if not definition or not template then
 		return nil
 	end
 
 	local clone = template:Clone()
-	clone.Name = string.format("Toastmarshal_%03d", displayIndex)
-	clone:SetAttribute("OddlingSpeciesId", SPECIES_ID)
-	clone:SetAttribute("DisplayIndex", displayIndex)
+	clone.Name = string.format("%s_%03d", allocation.SpeciesId, allocation.SpeciesDisplayIndex)
+	clone:SetAttribute("OddlingSpeciesId", allocation.SpeciesId)
+	clone:SetAttribute("SpeciesDisplayIndex", allocation.SpeciesDisplayIndex)
+	clone:SetAttribute("DisplaySlotIndex", allocation.SlotIndex)
 	clone:SetAttribute("OwnerUserId", player.UserId)
 	clone:SetAttribute("AssignedPlotId", plotId)
 	clone.Parent = container
 
-	if not configureDisplayPhysics(clone) then
-		warn(string.format("[ODDWORKS][OddlingDisplay] %s has no usable RootPart.", clone.Name))
+	if not configureDisplayPhysics(clone, definition) then
+		warn(string.format("[ODDWORKS][OddlingDisplay] %s has no usable configured root part.", clone.Name))
 		clone:Destroy()
 		return nil
 	end
@@ -430,12 +559,12 @@ local function spawnDisplay(player: Player, plotId: string, displayIndex: number
 		return nil
 	end
 
-	startIdleAnimation(clone)
+	startIdleAnimation(clone, definition)
 	return clone
 end
 
--- Reconciles authoritative ownership against physical display count and slot capacity.
--- This recoverable model can recreate missing visuals without replaying the craft transaction.
+-- Reconciles all configured species against one shared workshop capacity. The
+-- allocation is always derived from server ownership, level, and templates.
 local function reconcilePlayer(player: Player)
 	if player.Parent ~= Players then
 		cleanupPlayerDisplays(player)
@@ -460,48 +589,21 @@ local function reconcilePlayer(player: Player)
 		return
 	end
 
-	local ownedCount = snapshot.OwnedOddlings[SPECIES_ID] or 0
-	if ownedCount <= 0 then
+	local levelDefinition = WorkshopLevels.GetDefinition(snapshot.WorkshopLevel) :: WorkshopLevelDefinition?
+	if not levelDefinition or levelDefinition.DisplayCapacity < 0
+		or math.floor(levelDefinition.DisplayCapacity) ~= levelDefinition.DisplayCapacity
+	then
+		warn(string.format("[ODDWORKS][OddlingDisplay] Workshop level %s has invalid capacity.", tostring(snapshot.WorkshopLevel)))
 		cleanupPlayerDisplays(player)
-		capacityWarningKeys[player] = nil
 		return
 	end
 
 	local slots = discoverDisplaySlots(plot, plotId)
-	local levelDefinition = WorkshopLevels.GetDefinition(snapshot.WorkshopLevel) :: WorkshopLevelDefinition?
-	if
-		not levelDefinition
-		or levelDefinition.DisplayCapacity < 0
-		or math.floor(levelDefinition.DisplayCapacity) ~= levelDefinition.DisplayCapacity
-	then
+	local capacity = math.min(#slots, levelDefinition.DisplayCapacity)
+	local allocations = buildDisplayAllocation(snapshot.OwnedOddlings, capacity)
+	if #allocations == 0 then
 		cleanupPlayerDisplays(player)
-		warn(string.format("[ODDWORKS][OddlingDisplay] Missing valid capacity for Workshop Level %d.", snapshot.WorkshopLevel))
-		return
-	end
-
-	local activeCapacity = math.min(#slots, levelDefinition.DisplayCapacity)
-	local displayTarget = math.min(ownedCount, activeCapacity)
-	local warningKey = string.format("%s:%d:%d:%d", plotId, snapshot.WorkshopLevel, ownedCount, activeCapacity)
-	if ownedCount > activeCapacity then
-		if capacityWarningKeys[player] ~= warningKey then
-			warn(
-				string.format(
-					"[ODDWORKS][OddlingDisplay] %s owns %d Toastmarshals but Workshop Level %d activates %d of %d authored slots; ownership is preserved.",
-					player.Name,
-					ownedCount,
-					snapshot.WorkshopLevel,
-					activeCapacity,
-					#slots
-				)
-			)
-			capacityWarningKeys[player] = warningKey
-		end
-	else
 		capacityWarningKeys[player] = nil
-	end
-
-	if displayTarget == 0 then
-		cleanupPlayerDisplays(player)
 		return
 	end
 
@@ -511,56 +613,60 @@ local function reconcilePlayer(player: Player)
 	end
 
 	local existingDisplays = collectExistingDisplays(container)
-	local spawnedCount = 0
-	local removedCount = 0
-
-	local excessDisplayIndexes: { number } = {}
-	for displayIndex in pairs(existingDisplays) do
-		if displayIndex > displayTarget then
-			table.insert(excessDisplayIndexes, displayIndex)
+	for slotIndex, display in pairs(existingDisplays) do
+		if slotIndex > #allocations then
+			display:Destroy()
+			existingDisplays[slotIndex] = nil
 		end
 	end
 
-	for _, displayIndex in ipairs(excessDisplayIndexes) do
-		existingDisplays[displayIndex]:Destroy()
-		existingDisplays[displayIndex] = nil
-		removedCount += 1
-	end
+	local spawnedCount = 0
+	for _, allocation in ipairs(allocations) do
+		local existing = existingDisplays[allocation.SlotIndex]
+		local reusable = existing
+			and existing:GetAttribute("OddlingSpeciesId") == allocation.SpeciesId
+			and existing:GetAttribute("SpeciesDisplayIndex") == allocation.SpeciesDisplayIndex
+			and existing:GetAttribute("AssignedPlotId") == plotId
 
-	for displayIndex = 1, displayTarget do
-		local slot = slots[displayIndex]
-		local display = existingDisplays[displayIndex]
-
-		if display then
-			display:SetAttribute("AssignedPlotId", plotId)
-			if placeDisplayAtSlot(display, slot) then
-				startIdleAnimation(display)
+		if not reusable then
+			if existing then
+				existing:Destroy()
 			end
-		else
-			local spawned = spawnDisplay(player, plotId, displayIndex, slot, container)
-			if spawned then
+			if spawnDisplay(player, plotId, allocation, slots[allocation.SlotIndex], container) then
 				spawnedCount += 1
 			end
+		elseif existing then
+			placeDisplayAtSlot(existing, slots[allocation.SlotIndex])
 		end
 	end
 
-	if spawnedCount > 0 or removedCount > 0 then
-		print(
+	local totalOwnedConfigured = 0
+	for _, definition in ipairs(Oddlings.GetAllDefinitions()) do
+		totalOwnedConfigured += snapshot.OwnedOddlings[definition.SpeciesId] or 0
+	end
+	local warningKey = string.format("%d:%d:%d", totalOwnedConfigured, #allocations, capacity)
+	if totalOwnedConfigured > capacity and capacityWarningKeys[player] ~= warningKey then
+		warn(
 			string.format(
-				"[ODDWORKS][OddlingDisplay] Reconciled %s on %s (target: %d, spawned: %d, removed: %d).",
+				"[ODDWORKS][OddlingDisplay] %s owns %d configured Oddlings but has %d active display slots.",
 				player.Name,
-				plotId,
-				displayTarget,
-				spawnedCount,
-				removedCount
+				totalOwnedConfigured,
+				capacity
 			)
 		)
+		capacityWarningKeys[player] = warningKey
+	elseif totalOwnedConfigured <= capacity then
+		capacityWarningKeys[player] = nil
+	end
+
+	if spawnedCount > 0 then
+		print(string.format("[ODDWORKS][OddlingDisplay] Reconciled %s: spawned %d display(s).", player.Name, spawnedCount))
 	end
 end
 
--- Coalesces multiple synchronous state notifications from one craft transaction.
--- Spending Scrap and recording ownership may both fire, but representation needs one final-state reconciliation.
-local function scheduleReconciliation(player: Player)
+-- Defers reconciliation so repeated same-frame state notifications collapse into
+-- one derived-state rebuild after the authoritative mutation has completed.
+local function queueReconcile(player: Player)
 	if pendingReconciliations[player] then
 		return
 	end
@@ -572,90 +678,135 @@ local function scheduleReconciliation(player: Player)
 	end)
 end
 
--- Starts the downstream display layer after PlayerState and WorkshopService are ready.
--- No client request is registered: server state changes are the only spawn trigger.
+-- Returns whether the server currently has a validated runtime representation.
+-- Crafting checks this before spending Scrap to avoid invisible prototype ownership.
+function OddlingDisplayService.HasRuntimeTemplate(speciesId: string): boolean
+	return discoverTemplate(speciesId) ~= nil
+end
+
+-- Returns a fresh species-count map derived from this service's current clones.
+-- Callers can mutate the copy without changing display bookkeeping.
+function OddlingDisplayService.GetDisplayedCounts(player: Player): { [string]: number }
+	local counts: { [string]: number } = {}
+	local displaysFolder = runtimeDisplaysFolder
+	if not displaysFolder then
+		return counts
+	end
+
+	local container = displaysFolder:FindFirstChild(getPlayerContainerName(player))
+	if not container or not container:IsA("Folder") then
+		return counts
+	end
+
+	for _, child in ipairs(container:GetChildren()) do
+		if child:IsA("Model") then
+			local speciesId = child:GetAttribute("OddlingSpeciesId")
+			if typeof(speciesId) == "string" and Oddlings.GetDefinition(speciesId) then
+				counts[speciesId] = (counts[speciesId] or 0) + 1
+			end
+		end
+	end
+
+	return counts
+end
+
+-- Keeps the established narrow query for callers interested in one species.
+function OddlingDisplayService.GetDisplayedCount(player: Player, speciesId: string): number
+	return OddlingDisplayService.GetDisplayedCounts(player)[speciesId] or 0
+end
+
+-- Requests the normal derived-display reconciliation without granting ownership
+-- or exposing display internals. Studio tooling uses this to recover presentation
+-- from authoritative state, exactly as ordinary state notifications do.
+function OddlingDisplayService.Reconcile(player: Player): boolean
+	if not started or player.Parent ~= Players or not PlayerStateService.HasState(player) then
+		return false
+	end
+
+	queueReconcile(player)
+	return true
+end
+
+-- Starts after PlayerStateService and WorkshopService. State changes reconcile
+-- derived visuals; player removal cleans only that player's runtime container.
 function OddlingDisplayService.Start()
 	if started then
 		return
 	end
 
+	local runtimeFolder = getOrCreateFolder(Workspace, RUNTIME_FOLDER_NAME)
+	if not runtimeFolder then
+		error("[ODDWORKS][OddlingDisplay] Could not create runtime root folder.")
+	end
+
+	local displaysFolder = getOrCreateFolder(runtimeFolder, DISPLAYS_FOLDER_NAME)
+	if not displaysFolder then
+		error("[ODDWORKS][OddlingDisplay] Could not create runtime display folder.")
+	end
+
+	runtimeDisplaysFolder = displaysFolder
 	started = true
 
-	local runtimeRoot = getOrCreateFolder(Workspace, RUNTIME_FOLDER_NAME)
-	if not runtimeRoot then
-		warn("[ODDWORKS][OddlingDisplay] Service could not create its runtime root.")
-		return
+	-- Deleting a player's whole derived container is recoverable. The stable
+	-- OwnerUserId attribute resolves the authoritative player without global state.
+	displaysFolder.ChildRemoved:Connect(function(child: Instance)
+		if not child:IsA("Folder") then
+			return
+		end
+
+		local ownerUserId = child:GetAttribute("OwnerUserId")
+		if typeof(ownerUserId) ~= "number" then
+			return
+		end
+
+		local player = Players:GetPlayerByUserId(ownerUserId)
+		if player and not suppressContainerRecovery[player] then
+			local connection = playerContainerConnections[player]
+			if connection then
+				connection:Disconnect()
+				playerContainerConnections[player] = nil
+			end
+			queueReconcile(player)
+		end
+	end)
+
+	-- Runtime template removal/restoration is presentation failure only. Re-running
+	-- normal reconciliation lets existing ownership disappear/recover visually.
+	local assets = ServerStorage:FindFirstChild("ODDWORKSAssets")
+	local templatesFolder = if assets then assets:FindFirstChild("Oddlings") else nil
+	if templatesFolder then
+		templatesFolder.ChildAdded:Connect(function()
+			for _, player in ipairs(Players:GetPlayers()) do
+				queueReconcile(player)
+			end
+		end)
+		templatesFolder.ChildRemoved:Connect(function()
+			for _, player in ipairs(Players:GetPlayers()) do
+				queueReconcile(player)
+			end
+		end)
 	end
 
-	runtimeDisplaysFolder = getOrCreateFolder(runtimeRoot, DISPLAYS_FOLDER_NAME)
-	if not runtimeDisplaysFolder then
-		warn("[ODDWORKS][OddlingDisplay] Service could not create its display folder.")
-		return
+	for _, definition in ipairs(Oddlings.GetAllDefinitions()) do
+		discoverTemplate(definition.SpeciesId)
 	end
 
-	discoverTemplate()
-	PlayerStateService.ObserveStateChanged(scheduleReconciliation)
+	PlayerStateService.ObserveStateChanged(function(player: Player)
+		queueReconcile(player)
+	end)
 
 	Players.PlayerRemoving:Connect(function(player: Player)
 		pendingReconciliations[player] = nil
 		capacityWarningKeys[player] = nil
 		cleanupPlayerDisplays(player)
+		suppressContainerRecovery[player] = nil
 	end)
 
 	for _, player in ipairs(Players:GetPlayers()) do
-		scheduleReconciliation(player)
+		queueReconcile(player)
 	end
 
-	print("[ODDWORKS][OddlingDisplay] Service started.")
-end
-
--- Counts only this service's valid server-created displays for the player's current plot.
--- Callers receive a number rather than mutable display bookkeeping or Workspace authority.
-function OddlingDisplayService.GetDisplayedCount(player: Player, speciesId: string): number
-	if not started or speciesId ~= SPECIES_ID then
-		return 0
-	end
-
-	local assignedPlotId = WorkshopService.GetAssignedPlotId(player)
-	if not assignedPlotId or not WorkshopService.GetAssignedPlot(player) then
-		return 0
-	end
-
-	local displaysFolder = runtimeDisplaysFolder
-	if not displaysFolder then
-		return 0
-	end
-
-	local container = displaysFolder:FindFirstChild(getPlayerContainerName(player))
-	if not container or not container:IsA("Folder") then
-		return 0
-	end
-
-	local displayedIndexes: { [number]: boolean } = {}
-	for _, child in ipairs(container:GetChildren()) do
-		if
-			child:IsA("Model")
-			and child:GetAttribute("OddlingSpeciesId") == speciesId
-			and child:GetAttribute("OwnerUserId") == player.UserId
-			and child:GetAttribute("AssignedPlotId") == assignedPlotId
-		then
-			local displayIndex = child:GetAttribute("DisplayIndex")
-			if
-				typeof(displayIndex) == "number"
-				and displayIndex > 0
-				and math.floor(displayIndex) == displayIndex
-			then
-				displayedIndexes[displayIndex] = true
-			end
-		end
-	end
-
-	local displayedCount = 0
-	for _ in pairs(displayedIndexes) do
-		displayedCount += 1
-	end
-
-	return displayedCount
+	print("[ODDWORKS][OddlingDisplay] Service started with generic species reconciliation.")
 end
 
 return OddlingDisplayService

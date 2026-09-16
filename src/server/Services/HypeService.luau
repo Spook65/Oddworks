@@ -21,18 +21,18 @@ type OddlingDefinition = {
 	HypeIntervalSeconds: number,
 }
 
-local TOASTMARSHAL_SPECIES_ID = "Toastmarshal"
 local PRODUCTION_POLL_SECONDS = 1
 
 local HypeService = {}
 
--- One server-owned timestamp per producing player prevents newly displayed
--- Oddlings from receiving an instant reward while avoiding one loop per model.
-local nextProductionTimes: { [Player]: number } = {}
+-- Timers are scoped by player and species so different Oddling definitions can
+-- use different intervals without creating one loop per display model.
+local nextProductionTimes: { [Player]: { [string]: number } } = {}
+local productionDefinitions: { OddlingDefinition } = {}
 local started = false
 
--- Rejects invalid server configuration before it can produce malformed currency.
--- Hype remains integer-valued even though Luau numbers can also represent fractions.
+-- Rejects malformed server configuration before it can produce invalid currency.
+-- Hype remains integer-valued even though Luau numbers can represent fractions.
 local function isValidDefinition(definition: OddlingDefinition): boolean
 	local amount = definition.HypePerInterval
 	local interval = definition.HypeIntervalSeconds
@@ -48,90 +48,112 @@ local function isValidDefinition(definition: OddlingDefinition): boolean
 	return amount > 0 and math.floor(amount) == amount and interval > 0
 end
 
--- Evaluates one player's current server-created displays at the production tick.
--- Ownership alone is insufficient because authored display capacity is part of the economy.
-local function evaluatePlayer(player: Player, definition: OddlingDefinition, now: number)
+-- Builds one deterministic list of configured producers. Invalid definitions
+-- stop startup rather than silently changing the server-owned economy.
+local function loadProductionDefinitions(): { OddlingDefinition }
+	local definitions: { OddlingDefinition } = {}
+
+	for _, definition in ipairs(Oddlings.GetAllDefinitions()) do
+		if not isValidDefinition(definition) then
+			error(string.format("[ODDWORKS][HypeService] %s has an invalid production definition.", definition.SpeciesId))
+		end
+
+		table.insert(definitions, definition)
+	end
+
+	return definitions
+end
+
+-- Evaluates one player from server-created display counts at the current tick.
+-- Zero displayed models produce nothing even when authoritative ownership is higher.
+local function evaluatePlayer(player: Player, now: number)
 	if not PlayerStateService.HasState(player) then
 		nextProductionTimes[player] = nil
 		return
 	end
 
-	local displayedCount = OddlingDisplayService.GetDisplayedCount(player, definition.SpeciesId)
-	if displayedCount <= 0 then
-		nextProductionTimes[player] = nil
+	local displayedCounts = OddlingDisplayService.GetDisplayedCounts(player)
+	local playerTimers = nextProductionTimes[player]
+	if not playerTimers then
+		playerTimers = {}
+		nextProductionTimes[player] = playerTimers
+	end
+
+	local totalAward = 0
+	local contributions: { string } = {}
+
+	for _, definition in ipairs(productionDefinitions) do
+		local speciesId = definition.SpeciesId
+		local displayedCount = displayedCounts[speciesId] or 0
+
+		if displayedCount <= 0 then
+			-- Returning to zero resets the interval, preventing an instant award
+			-- when a display later reappears after plot loss or reconciliation.
+			playerTimers[speciesId] = nil
+		else
+			local nextProductionTime = playerTimers[speciesId]
+			if not nextProductionTime then
+				playerTimers[speciesId] = now + definition.HypeIntervalSeconds
+			elseif now >= nextProductionTime then
+				local award = displayedCount * definition.HypePerInterval
+				totalAward += award
+				table.insert(contributions, string.format("%s:%d", speciesId, displayedCount))
+
+				-- Scheduling from this evaluation avoids catch-up bursts after stalls.
+				playerTimers[speciesId] = now + definition.HypeIntervalSeconds
+			end
+		end
+	end
+
+	if totalAward <= 0 then
 		return
 	end
 
-	local nextProductionTime = nextProductionTimes[player]
-	if not nextProductionTime then
-		-- A full interval begins only after a valid display is first observed.
-		nextProductionTimes[player] = now + definition.HypeIntervalSeconds
-		return
-	end
-
-	if now < nextProductionTime then
-		return
-	end
-
-	local award = displayedCount * definition.HypePerInterval
-	if PlayerStateService.AddHype(player, award) then
+	if PlayerStateService.AddHype(player, totalAward) then
 		print(
 			string.format(
-				"[ODDWORKS][HypeService] %s +%d Hype from %d displayed Toastmarshal(s).",
+				"[ODDWORKS][HypeService] %s +%d Hype from displayed Oddlings (%s).",
 				player.Name,
-				award,
-				displayedCount
+				totalAward,
+				table.concat(contributions, ", ")
 			)
 		)
 	else
 		warn(string.format("[ODDWORKS][HypeService] Failed to award Hype to %s.", player.Name))
 	end
-
-	-- Scheduling from the completed evaluation avoids catch-up bursts after a server stall.
-	nextProductionTimes[player] = now + definition.HypeIntervalSeconds
 end
 
--- Runs one bounded server loop for all active players.
--- The client supplies neither timing nor counts; both inputs are read from server-owned systems.
-local function runProductionLoop(definition: OddlingDefinition)
+-- One bounded server loop evaluates every active player and species. Timing and
+-- display counts never cross the client/server trust boundary.
+local function runProductionLoop()
 	task.spawn(function()
 		while true do
 			task.wait(PRODUCTION_POLL_SECONDS)
 			local now = os.clock()
 
 			for _, player in ipairs(Players:GetPlayers()) do
-				evaluatePlayer(player, definition, now)
+				evaluatePlayer(player, now)
 			end
 		end
 	end)
 end
 
--- Starts production only after PlayerState and OddlingDisplayService are available.
--- PlayerRemoving cleanup prevents stale Player references from remaining in timing state.
+-- Starts after PlayerStateService and OddlingDisplayService. Cleanup prevents
+-- stale Player references from surviving beyond the live server session.
 function HypeService.Start()
 	if started then
 		return
 	end
 
-	local definition = Oddlings.GetDefinition(TOASTMARSHAL_SPECIES_ID) :: OddlingDefinition?
-	if not definition or not isValidDefinition(definition) then
-		error("[ODDWORKS][HypeService] Toastmarshal has an invalid production definition.")
-	end
-
+	productionDefinitions = loadProductionDefinitions()
 	started = true
 
 	Players.PlayerRemoving:Connect(function(player: Player)
 		nextProductionTimes[player] = nil
 	end)
 
-	runProductionLoop(definition)
-	print(
-		string.format(
-			"[ODDWORKS][HypeService] Service started (%d Hype per %g seconds per displayed Toastmarshal).",
-			definition.HypePerInterval,
-			definition.HypeIntervalSeconds
-		)
-	)
+	runProductionLoop()
+	print(string.format("[ODDWORKS][HypeService] Service started with %d producing species.", #productionDefinitions))
 end
 
 return HypeService

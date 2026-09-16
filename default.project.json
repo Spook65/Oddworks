@@ -23,6 +23,9 @@
       }
     },
     "ServerScriptService": {
+      "ServerPackages": {
+        "$path": "ServerPackages"
+      },
       "Server": {
         "$path": "src/server"
       }
@@ -34,6 +37,9 @@
           "$className": "Folder",
           "Toastmarshal_Common": {
             "$path": "assets/roblox/oddlings/Toastmarshal_Common.rbxm"
+          },
+          "Conejurer_Prototype": {
+            "$path": "assets/roblox/oddlings/Conejurer_Prototype.rbxm"
           }
         }
       }
