@@ -175,6 +175,8 @@ Derived systems may read safe snapshots or narrow server APIs. They must not bec
 
 The following rules constrain future Direction v2 systems. They do not claim that active salvage, component inventories, banking, frames, sockets, or Custom Constructs currently exist.
 
+Vertical Slice 0.2 uses the exact server-owned state and planned payload rules in [Modular Prototype State Contract](MODULAR_PROTOTYPE_STATE.md) and the immutable geometry/socket rules in [SmallBiped_v1 Technical Contract](SMALL_BIPED_V1.md). Neither document creates networking or gameplay by itself.
+
 ### Client May Request
 
 - a salvage interaction or allowed extraction input
@@ -208,6 +210,8 @@ For Vertical Slice 0.2, banked components are protected only for the current ser
 ### Assembly and Placement
 
 Future assembly must validate that the player owns each banked component and that each module is compatible with the chosen frame and socket. Attachment transforms come from server configuration, not arbitrary client CFrames.
+
+The 0.2 PrototypeConstruct temporarily equips components. Installed selections are removed from available bank counts and returned atomically on rebuild or disassembly. The server must preserve the component conservation invariant defined in MODULAR_PROTOTYPE_STATE.md.
 
 If the client requests an allowed preview orientation or placement, the server must constrain it to owned context, allowed surfaces, workshop bounds, collision and footprint rules, and supported values before it affects authoritative state.
 

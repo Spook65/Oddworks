@@ -99,11 +99,11 @@ Its player-selectable module roles and socket vocabulary are:
 
 A Core is not selectable geometry in SmallBiped_v1. Cores remain available to future Signature Oddlings, advanced frames, major passives, and authored discoveries.
 
-These names express intended roles only. Exact geometry, axes, transforms, scale, pivots, mirroring behavior, and rig relationships are intentionally not finalized in this direction-freeze pass.
+Exact geometry envelopes, axes, transforms, scale, pivots, root-to-ground offset, runtime hierarchy, and rig relationships are frozen in [SmallBiped_v1 Technical Contract](SMALL_BIPED_V1.md).
 
-Before modular assets enter production, a dedicated frame-contract pass must create and verify a canonical reference asset. Blender and art agents must author against that reference rather than inventing module scale or connection standards asset by asset.
+Blender and art agents must author against that contract rather than inventing module scale or connection standards asset by asset.
 
-That pass must also freeze whether ArmModule represents one selected visible arm plus a built-in frame arm or a paired-arm assembly, and whether LegsModule represents the complete paired lower-body assembly. Individual left/right customization is outside the first prototype.
+ArmModule is one paired-arm assembly. LegsModule is one complete paired lower-body assembly. Individual left/right customization is outside the first prototype.
 
 ## Frame and Size Classes
 

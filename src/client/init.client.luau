@@ -34,6 +34,13 @@ end
 
 local CraftingController = require(craftingControllerModule)
 
+local activeSalvageControllerModule = Controllers:WaitForChild("ActiveSalvageController")
+if not activeSalvageControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.ActiveSalvageController must be a ModuleScript.")
+end
+
+local ActiveSalvageController = require(activeSalvageControllerModule)
+
 local devConsoleControllerModule = Controllers:WaitForChild("DevConsoleController")
 if not devConsoleControllerModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Client] Client.Controllers.DevConsoleController must be a ModuleScript.")
@@ -45,6 +52,7 @@ local DevConsoleController = require(devConsoleControllerModule)
 -- server snapshots, but it does not own or mutate authoritative gameplay state.
 HudController.Start()
 CraftingController.Start()
+ActiveSalvageController.Start()
 -- The controller exits immediately outside Studio; the server remains the
 -- actual authorization boundary even when the development UI is visible.
 DevConsoleController.Start()

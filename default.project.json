@@ -16,6 +16,18 @@
         },
         "CraftResult": {
           "$className": "RemoteEvent"
+        },
+        "ModularStateRequest": {
+          "$className": "RemoteEvent"
+        },
+        "ModularStateSnapshot": {
+          "$className": "RemoteEvent"
+        },
+        "ExtractionInputRequest": {
+          "$className": "RemoteEvent"
+        },
+        "ActiveSalvageState": {
+          "$className": "RemoteEvent"
         }
       },
       "Shared": {
@@ -331,6 +343,49 @@
             "Material": "Concrete",
             "TopSurface": "Smooth",
             "BottomSurface": "Smooth"
+          },
+          "JammedSalvageWreck": {
+            "$className": "Model",
+            "InteractionPart": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": true,
+                "CanQuery": true,
+                "CanTouch": false,
+                "Size": [8, 3, 5],
+                "Position": [0, 1.975, 37],
+                "Color": [0.40784313725490196, 0.3254901960784314, 0.24705882352941178],
+                "Material": "CorrodedMetal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              },
+              "Prompt": {
+                "$className": "ProximityPrompt",
+                "$properties": {
+                  "ActionText": "Start Extraction",
+                  "ObjectText": "Jammed Salvage Wreck",
+                  "HoldDuration": 0,
+                  "MaxActivationDistance": 10,
+                  "RequiresLineOfSight": false
+                }
+              }
+            },
+            "SignalLight": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Size": [2.2, 0.5, 2.2],
+                "Position": [0, 3.725, 37],
+                "Color": [0.35294117647058826, 0.9019607843137255, 0.5882352941176471],
+                "Material": "Neon",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              }
+            }
           },
           "Salvage01": {
             "$className": "Part",

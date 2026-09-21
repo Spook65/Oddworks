@@ -16,6 +16,8 @@ Future passes must read the relevant parts of:
 - [Art Direction](ART_DIRECTION.md)
 - [Salvage Design Contract](SALVAGE_DESIGN_CONTRACT.md)
 - [Modular Oddling Contract](MODULAR_ODDLING_CONTRACT.md)
+- [SmallBiped_v1 Technical Contract](SMALL_BIPED_V1.md)
+- [Modular Prototype State Contract](MODULAR_PROTOTYPE_STATE.md)
 - [Security Contract](SECURITY_CONTRACT.md)
 - [World Placement](WORLD_PLACEMENT.md)
 - [Persistence](PERSISTENCE.md)
@@ -159,17 +161,24 @@ Custom Construct Hype is not part of Vertical Slice 0.2 acceptance. Do not modif
 
 ### 0.2A - Frame, Component, and State Contract
 
-Define the SmallBiped_v1 reference, component IDs, HeadSocket/ArmSocket/LegsSocket compatibility, deterministic rarity effects, temporary state shape, and server/client boundaries. Freeze whether ArmModule is one selected arm plus a built-in arm or a paired assembly, and whether LegsModule is the complete paired lower body, before Blender work begins. Individual left/right customization is out of scope.
+Frozen by SMALL_BIPED_V1.md and MODULAR_PROTOTYPE_STATE.md:
 
-Define the atomic BANKED -> RESERVED / INSTALLED -> RETURNED ON REBUILD OR DISASSEMBLY lifecycle. Prototype assembly must not permanently destroy components, and installed components must not remain simultaneously available in BankedComponents.
+- exact frame orientation, root, sockets, envelopes, and paired-limb semantics
+- six base ComponentIds with separate rarity configuration
+- count-based UnbankedComponents and BankedComponents
+- one session-only PrototypeConstruct
+- atomic BANKED -> RESERVED / INSTALLED -> RETURNED ON REBUILD OR DISASSEMBLY behavior
+- narrow future request payloads and validation boundaries
 
-Acceptance: one precise data and asset contract exists without speculative systems.
+Acceptance: Gameplay and Blender agents can implement against the same precise contracts without persistence migration or speculative systems.
 
 ### 0.2B - One Active Salvage Encounter
 
 Implement one forgiving server-authoritative extraction activity that awards temporary unbanked prototype components.
 
 Acceptance: reward identity and success come from the server; ordinary failure affects only the current unbanked test haul.
+
+Human test result: the implemented `JammedSalvageWreck` timing interaction works as a special encounter prototype, but repeated timed pulling is not the default salvage verb. Ordinary component recovery may be simple; opportunity, unbanked haul, return travel, environmental complication, and push-your-luck choices can provide the broader active gameplay.
 
 ### 0.2C - Banking Boundary
 

@@ -6,6 +6,8 @@ This is the active design contract for future active-salvage work in ODDWORKS Di
 
 The current server-validated SalvageService remains useful as a security and economy proof. Its repeated prompt-to-Scrap interaction is not the final salvage experience described here. Everything marked future in this document is a design requirement, not a claim about implemented gameplay.
 
+Vertical Slice 0.2 temporary ownership, banking, reward authority, planned request shapes, and failure behavior are frozen in [Modular Prototype State Contract](MODULAR_PROTOTYPE_STATE.md).
+
 ## Player Promise
 
 Salvage should make the player feel that they found something strange, worked to recover it, and made a meaningful decision about getting it home.
@@ -21,6 +23,8 @@ The primary field verbs are:
 ## Active Salvage Rule
 
 Meaningful components require an activity, extraction, challenge, discovery, or risk. A repeated hold-to-interact reward can support onboarding or common utility, but it must not carry the full progression economy by itself.
+
+Ordinary component recovery may be simple. The larger active play can come from the opportunity or location, unbanked ownership, the return trip, an environmental complication, or a push-your-luck decision. Extraction minigames are one special encounter tool, not the required default salvage verb.
 
 An active salvage opportunity should normally include:
 
@@ -79,7 +83,7 @@ The following should normally remain safe:
 
 This boundary lets field play carry tension without teaching players that their collection can disappear unpredictably.
 
-Banking is an authoritative state transition, not a client presentation event. Vertical Slice 0.2A must define exactly when an unbanked component enters protected session inventory and make the transition resistant to duplication, disconnect races, and replayed requests.
+Banking is an authoritative state transition, not a client presentation event. MODULAR_PROTOTYPE_STATE.md defines the atomic move from the complete current unbanked haul into protected session inventory and its duplication, disconnect, and replay boundaries.
 
 ## Unbanked-Haul Legibility
 
@@ -180,6 +184,10 @@ The client must never submit a complete authoritative reward or component record
 ## First Active-Salvage Prototype
 
 The first experiment should contain one forgiving active salvage encounter and only enough temporary component state to answer whether recovery feels better than repeated prompt collection.
+
+### JammedSalvageWreck Human-Test Result
+
+`JammedSalvageWreck` is classified as a **special salvage encounter prototype**. Its three-stage timed pulling is acceptable when damaged machinery supports that fiction, but human testing rejected timed pulling as the default repeated ODDWORKS salvage interaction. Future ordinary recovery may be simpler while risk, travel, environmental complications, and bank-or-push decisions carry the larger active loop.
 
 It should prove:
 

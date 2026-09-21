@@ -28,6 +28,13 @@ end
 
 local PlayerStateService = require(playerStateServiceModule)
 
+local modularPrototypeStateServiceModule = Services:WaitForChild("ModularPrototypeStateService")
+if not modularPrototypeStateServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.ModularPrototypeStateService must be a ModuleScript.")
+end
+
+local ModularPrototypeStateService = require(modularPrototypeStateServiceModule)
+
 local persistenceServiceModule = Services:WaitForChild("PersistenceService")
 if not persistenceServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.PersistenceService must be a ModuleScript.")
@@ -56,12 +63,26 @@ end
 
 local StateReplicationService = require(stateReplicationServiceModule)
 
+local modularPrototypeReplicationServiceModule = Services:WaitForChild("ModularPrototypeReplicationService")
+if not modularPrototypeReplicationServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.ModularPrototypeReplicationService must be a ModuleScript.")
+end
+
+local ModularPrototypeReplicationService = require(modularPrototypeReplicationServiceModule)
+
 local salvageServiceModule = Services:WaitForChild("SalvageService")
 if not salvageServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.SalvageService must be a ModuleScript.")
 end
 
 local SalvageService = require(salvageServiceModule)
+
+local activeSalvageEncounterServiceModule = Services:WaitForChild("ActiveSalvageEncounterService")
+if not activeSalvageEncounterServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.ActiveSalvageEncounterService must be a ModuleScript.")
+end
+
+local ActiveSalvageEncounterService = require(activeSalvageEncounterServiceModule)
 
 local craftingServiceModule = Services:WaitForChild("CraftingService")
 if not craftingServiceModule:IsA("ModuleScript") then
@@ -131,13 +152,18 @@ requireChildOfClass(workshopPlots, "Plot01", "Part")
 requireChildOfClass(workshopPlots, "Plot02", "Part")
 
 PlayerStateService.Start()
+-- Experimental state subscribes before persistence establishes any ready player,
+-- preserving load-before-gameplay ordering without entering schema v1.
+ModularPrototypeStateService.Start()
 ProgressionService.Start()
 StateReplicationService.Start()
+ModularPrototypeReplicationService.Start()
 WorkshopService.Start()
 OddlingDisplayService.Start()
 HypeService.Start()
 WorkshopUpgradeService.Start()
 SalvageService.Start()
+ActiveSalvageEncounterService.Start()
 CraftingService.Start()
 -- Persistence starts after every state consumer has registered its listeners.
 -- PlayerState remains absent until a profile session has loaded successfully.

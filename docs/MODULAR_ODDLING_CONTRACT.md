@@ -6,6 +6,11 @@ This document defines the future modular-construction boundary for ODDWORKS Dire
 
 The current Toastmarshal pipeline and count-based Oddling ownership remain valid technical foundations. Modular construction will be introduced through a small experiment rather than a replacement of every existing system.
 
+Vertical Slice 0.2A freezes the implementation-facing details in:
+
+- [SmallBiped_v1 Technical Contract](SMALL_BIPED_V1.md)
+- [Modular Prototype State Contract](MODULAR_PROTOTYPE_STATE.md)
+
 ## Two Creature Categories
 
 ### Signature Oddlings
@@ -70,22 +75,20 @@ The corresponding prototype socket vocabulary is:
 
 A Core is not a player-selectable geometry module for SmallBiped_v1. Cores remain a valid future resource concept for Signature Oddlings, advanced frames, major passives, and authored discoveries.
 
-The names do not finalize exact transforms. Vertical Slice 0.2A must define canonical origin, scale, axes, pivots, attachment transforms, mirroring rules, rig behavior, bounds, and grounding.
+Canonical origin, scale, axes, pivots, attachment transforms, rig behavior, bounds, and grounding are frozen in SMALL_BIPED_V1.md. Individual modules may not redefine them.
 
 Future frames may add or change slots through explicit versioned contracts. An individual module must not silently redefine the frame.
 
-### Arm and Legs Semantics to Freeze in 0.2A
+### Arm and Legs Semantics
 
-Before Blender modular assets are authored, Vertical Slice 0.2A must decide:
+- ArmModule is one complete paired-arm assembly attached through ArmSocket.
+- LegsModule is one complete paired lower-body and mobility assembly attached through LegsSocket.
 
-- whether ArmModule represents one visible player-selected arm paired with a built-in frame arm, or one complete paired-arm assembly
-- whether LegsModule represents the complete paired lower-body and mobility assembly
-
-Individual left/right arm or leg customization is out of scope for the first prototype. Asset production must not guess these semantics independently.
+Individual left/right arm or leg customization is out of scope for the first prototype.
 
 ## Compatibility Contract
 
-A future component configuration should identify at least:
+The prototype server configuration must identify:
 
 - stable component ID
 - compatible frame class
@@ -96,6 +99,8 @@ A future component configuration should identify at least:
 - authored attachment orientation and transform
 
 The server decides compatibility. A client may request a selection, but it may not claim that a component fits a socket or supply the authoritative attachment transform.
+
+The six frozen prototype ComponentIds, ArtModels, effect keys, and rarity values are defined in SMALL_BIPED_V1.md.
 
 ## Component Domains
 
@@ -118,9 +123,9 @@ For the first prototype:
 
 Example:
 
-- ServoArm_Common -> +5% Extraction
-- ServoArm_Rare -> +12% Extraction
-- ServoArm_Legendary -> +22% Extraction
+- ComponentId ServoArm + Rarity Common -> +5% Extraction
+- ComponentId ServoArm + Rarity Rare -> +12% Extraction
+- ComponentId ServoArm + Rarity Legendary -> +22% Extraction
 
 These values illustrate the contract and are not final balance commitments.
 
@@ -128,7 +133,7 @@ The first prototype must not add random per-instance rolls. In a future system, 
 
 ### Prototype Rarity Art Rule
 
-One ComponentId uses one prototype art model regardless of rarity. ServoArm_Common, ServoArm_Rare, and ServoArm_Legendary all use the same ServoArm prototype geometry.
+One ComponentId uses one prototype art model regardless of rarity. ServoArm with Common, Rare, or Legendary metadata always uses the same ServoArm prototype geometry.
 
 Rarity changes authoritative configuration such as effect magnitude and client-safe UI presentation. Small material or VFX distinctions may be considered later, but Vertical Slice 0.2 does not require separate Common, Rare, and Legendary Blender models.
 
@@ -196,11 +201,11 @@ For Vertical Slice 0.2, the single session-only PrototypeConstruct does not requ
 
 Prototype components represent physical owned parts. A component installed in the one PrototypeConstruct must not simultaneously remain freely available in BankedComponents.
 
-Vertical Slice 0.2A must formalize a simple lifecycle:
+The prototype lifecycle is:
 
 **BANKED -> RESERVED / INSTALLED -> RETURNED ON REBUILD OR DISASSEMBLY**
 
-Assembly should not permanently destroy prototype components. Exact atomic reservation, replacement, rollback, and return behavior belongs to 0.2A.
+Assembly does not permanently destroy prototype components. Exact atomic reservation, replacement, rollback, and return behavior is frozen in MODULAR_PROTOTYPE_STATE.md.
 
 ## Collection Information Architecture
 
@@ -252,6 +257,8 @@ During Vertical Slice 0.2, **banked** means protected temporary component invent
 - **UNBANKED:** vulnerable temporary salvage-run components
 - **BANKED:** protected temporary component inventory for the current server session
 - **RESERVED / INSTALLED:** owned components assigned to the session-only PrototypeConstruct and unavailable for simultaneous assembly use
+
+The authoritative nested count maps, Construct record, conservation invariant, and transaction rules are defined in MODULAR_PROTOTYPE_STATE.md.
 
 If the experiment proves fun, persistence may evolve toward:
 

@@ -59,6 +59,9 @@ local playerStates: { [Player]: PlayerState } = {}
 -- This BindableEvent stays server-internal. Other server services may observe
 -- state changes, but clients cannot fire it or use it to mutate PlayerState.
 local stateChangedEvent = Instance.new("BindableEvent")
+-- Profile loss can remove state before PlayerRemoving. A separate private signal
+-- lets session-only dependents clean up immediately without polling private state.
+local stateRemovedEvent = Instance.new("BindableEvent")
 local started = false
 
 -- Notifies server-only listeners that a player's authoritative state changed.
@@ -220,6 +223,7 @@ function PlayerStateService.RemovePlayerState(player: Player): boolean
 	end
 
 	playerStates[player] = nil
+	stateRemovedEvent:Fire(player)
 	print(string.format("[ODDWORKS][PlayerState] Removed session state for %s (%d).", player.Name, player.UserId))
 	return true
 end
@@ -462,6 +466,12 @@ end
 -- direct access to the private playerStates table or the event's Fire method.
 function PlayerStateService.ObserveStateChanged(callback: (Player) -> ()): RBXScriptConnection
 	return stateChangedEvent.Event:Connect(callback)
+end
+
+-- Lets dependent server services tear down session-only state on profile loss
+-- without exposing PlayerState internals or waiting for the Player to leave.
+function PlayerStateService.ObserveStateRemoved(callback: (Player) -> ()): RBXScriptConnection
+	return stateRemovedEvent.Event:Connect(callback)
 end
 
 -- Returns a defensive copy of the player's current session state.
