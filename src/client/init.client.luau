@@ -41,6 +41,13 @@ end
 
 local ActiveSalvageController = require(activeSalvageControllerModule)
 
+local assemblyControllerModule = Controllers:WaitForChild("AssemblyController")
+if not assemblyControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.AssemblyController must be a ModuleScript.")
+end
+
+local AssemblyController = require(assemblyControllerModule)
+
 local devConsoleControllerModule = Controllers:WaitForChild("DevConsoleController")
 if not devConsoleControllerModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Client] Client.Controllers.DevConsoleController must be a ModuleScript.")
@@ -53,6 +60,7 @@ local DevConsoleController = require(devConsoleControllerModule)
 HudController.Start()
 CraftingController.Start()
 ActiveSalvageController.Start()
+AssemblyController.Start()
 -- The controller exits immediately outside Studio; the server remains the
 -- actual authorization boundary even when the development UI is visible.
 DevConsoleController.Start()

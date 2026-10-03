@@ -181,7 +181,20 @@ function CommandUtil.DescribeModularState(player: Player): string
 		return string.format("No temporary modular state exists for %s.", player.Name)
 	end
 
-	local constructDescription = if snapshot.PrototypeConstruct then snapshot.PrototypeConstruct.FrameId else "<none>"
+	local constructDescription = "<none>"
+	if snapshot.PrototypeConstruct then
+		local construct = snapshot.PrototypeConstruct
+		constructDescription = string.format(
+			"%s Head=%s[%s] Arm=%s[%s] Legs=%s[%s]",
+			construct.FrameId,
+			construct.Head.ComponentId,
+			construct.Head.Rarity,
+			construct.Arm.ComponentId,
+			construct.Arm.Rarity,
+			construct.Legs.ComponentId,
+			construct.Legs.Rarity
+		)
+	end
 	return string.format(
 		"%s | Unbanked={%s} | Banked={%s} | PrototypeConstruct=%s",
 		player.Name,

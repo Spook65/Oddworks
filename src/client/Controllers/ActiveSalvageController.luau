@@ -10,12 +10,27 @@ type ComponentEntry = {
 	ComponentId: string,
 	DisplayName: string,
 	Rarity: string,
+	Slot: string,
 	Count: number,
+}
+
+type ComponentSelection = {
+	ComponentId: string,
+	DisplayName: string,
+	Rarity: string,
+}
+
+type PrototypeConstruct = {
+	FrameId: string,
+	Head: ComponentSelection,
+	Arm: ComponentSelection,
+	Legs: ComponentSelection,
 }
 
 type ModularSnapshot = {
 	UnbankedComponents: { ComponentEntry },
 	BankedComponents: { ComponentEntry },
+	PrototypeConstruct: PrototypeConstruct?,
 }
 
 type StagePresentation = {
@@ -76,6 +91,10 @@ local function isValidRarity(value: any): boolean
 	return value == "Common" or value == "Rare" or value == "Legendary"
 end
 
+local function isValidSlot(value: any): boolean
+	return value == "Head" or value == "Arm" or value == "Legs"
+end
+
 -- Client validation protects this temporary UI from malformed packets. It does
 -- not make the display copy authoritative or create any inventory mutation path.
 local function readComponentEntries(source: any): { ComponentEntry }?
@@ -90,6 +109,7 @@ local function readComponentEntries(source: any): { ComponentEntry }?
 			or not isBoundedString(entry.ComponentId, 48)
 			or not isBoundedString(entry.DisplayName, 64)
 			or not isValidRarity(entry.Rarity)
+			or not isValidSlot(entry.Slot)
 			or not isPositiveInteger(entry.Count)
 			or entry.Count > 999
 		then
@@ -100,10 +120,58 @@ local function readComponentEntries(source: any): { ComponentEntry }?
 			ComponentId = entry.ComponentId,
 			DisplayName = entry.DisplayName,
 			Rarity = entry.Rarity,
+			Slot = entry.Slot,
 			Count = entry.Count,
 		})
 	end
 	return entries
+end
+
+local function readSelection(value: any): ComponentSelection?
+	if typeof(value) ~= "table"
+		or not isBoundedString(value.ComponentId, 48)
+		or not isBoundedString(value.DisplayName, 64)
+		or not isValidRarity(value.Rarity)
+	then
+		return nil
+	end
+	for key in pairs(value) do
+		if key ~= "ComponentId" and key ~= "DisplayName" and key ~= "Rarity" then
+			return nil
+		end
+	end
+	return {
+		ComponentId = value.ComponentId,
+		DisplayName = value.DisplayName,
+		Rarity = value.Rarity,
+	}
+end
+
+local function readPrototypeConstruct(value: any): PrototypeConstruct?
+	if value == nil then
+		return nil
+	end
+	if typeof(value) ~= "table" or value.FrameId ~= "SmallBiped_v1" then
+		return nil
+	end
+	for key in pairs(value) do
+		if key ~= "FrameId" and key ~= "Head" and key ~= "Arm" and key ~= "Legs" then
+			return nil
+		end
+	end
+
+	local head = readSelection(value.Head)
+	local arm = readSelection(value.Arm)
+	local legs = readSelection(value.Legs)
+	if not head or not arm or not legs then
+		return nil
+	end
+	return {
+		FrameId = value.FrameId,
+		Head = head,
+		Arm = arm,
+		Legs = legs,
+	}
 end
 
 -- Client validation protects this temporary UI from malformed packets. It does
@@ -116,7 +184,7 @@ local function readModularSnapshot(payload: any): ModularSnapshot?
 		return nil
 	end
 	for key in pairs(payload) do
-		if key ~= "UnbankedComponents" and key ~= "BankedComponents" then
+		if key ~= "UnbankedComponents" and key ~= "BankedComponents" and key ~= "PrototypeConstruct" then
 			return nil
 		end
 	end
@@ -126,10 +194,15 @@ local function readModularSnapshot(payload: any): ModularSnapshot?
 	if not unbankedEntries or not bankedEntries then
 		return nil
 	end
+	local construct = readPrototypeConstruct(payload.PrototypeConstruct)
+	if payload.PrototypeConstruct ~= nil and not construct then
+		return nil
+	end
 
 	return {
 		UnbankedComponents = unbankedEntries,
 		BankedComponents = bankedEntries,
+		PrototypeConstruct = construct,
 	}
 end
 

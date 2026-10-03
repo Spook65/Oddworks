@@ -7,6 +7,7 @@ export type ComponentDefinition = {
 	ComponentId: string,
 	DisplayName: string,
 	Slot: ComponentSlot,
+	CompatibleFrames: { [string]: boolean },
 }
 
 local Components = {}
@@ -16,31 +17,37 @@ local definitions: { [string]: ComponentDefinition } = {
 		ComponentId = "ClownMask",
 		DisplayName = "Clown Mask",
 		Slot = "Head",
+		CompatibleFrames = { SmallBiped_v1 = true },
 	},
 	SignalScanner = {
 		ComponentId = "SignalScanner",
 		DisplayName = "Signal Scanner",
 		Slot = "Head",
+		CompatibleFrames = { SmallBiped_v1 = true },
 	},
 	RustClaw = {
 		ComponentId = "RustClaw",
 		DisplayName = "Rust Claw",
 		Slot = "Arm",
+		CompatibleFrames = { SmallBiped_v1 = true },
 	},
 	ServoArm = {
 		ComponentId = "ServoArm",
 		DisplayName = "Servo Arm",
 		Slot = "Arm",
+		CompatibleFrames = { SmallBiped_v1 = true },
 	},
 	StitchedBoots = {
 		ComponentId = "StitchedBoots",
 		DisplayName = "Stitched Boots",
 		Slot = "Legs",
+		CompatibleFrames = { SmallBiped_v1 = true },
 	},
 	SpringLegs = {
 		ComponentId = "SpringLegs",
 		DisplayName = "Spring Legs",
 		Slot = "Legs",
+		CompatibleFrames = { SmallBiped_v1 = true },
 	},
 }
 
@@ -57,6 +64,7 @@ local function copyDefinition(definition: ComponentDefinition): ComponentDefinit
 		ComponentId = definition.ComponentId,
 		DisplayName = definition.DisplayName,
 		Slot = definition.Slot,
+		CompatibleFrames = table.clone(definition.CompatibleFrames),
 	}
 end
 
@@ -84,6 +92,11 @@ end
 
 function Components.IsValidRarity(rarity: string): boolean
 	return validRarities[rarity] == true
+end
+
+function Components.IsCompatibleWithFrame(componentId: string, frameId: string): boolean
+	local definition = definitions[componentId]
+	return definition ~= nil and definition.CompatibleFrames[frameId] == true
 end
 
 return Components

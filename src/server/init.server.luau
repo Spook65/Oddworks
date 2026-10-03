@@ -119,6 +119,13 @@ end
 
 local WorkshopBankingService = require(workshopBankingServiceModule)
 
+local prototypeAssemblyServiceModule = Services:WaitForChild("PrototypeAssemblyService")
+if not prototypeAssemblyServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.PrototypeAssemblyService must be a ModuleScript.")
+end
+
+local PrototypeAssemblyService = require(prototypeAssemblyServiceModule)
+
 local devHarnessServiceModule = Services:WaitForChild("DevHarnessService")
 if not devHarnessServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.DevHarnessService must be a ModuleScript.")
@@ -170,6 +177,7 @@ OddlingDisplayService.Start()
 HypeService.Start()
 WorkshopUpgradeService.Start()
 WorkshopBankingService.Start()
+PrototypeAssemblyService.Start()
 SalvageService.Start()
 ActiveSalvageEncounterService.Start()
 CraftingService.Start()

@@ -31,6 +31,15 @@
         },
         "BankResult": {
           "$className": "RemoteEvent"
+        },
+        "AssemblerOpen": {
+          "$className": "RemoteEvent"
+        },
+        "AssembleConstructRequest": {
+          "$className": "RemoteEvent"
+        },
+        "AssemblyResult": {
+          "$className": "RemoteEvent"
         }
       },
       "Shared": {
@@ -245,6 +254,29 @@
                   "RequiresLineOfSight": false
                 }
               }
+            },
+            "PrototypeAssembler": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": true,
+                "Size": [4, 2.5, 4],
+                "Position": [-13, 1.7, 18],
+                "Color": [0.7725490196078432, 0.4549019607843137, 0.21176470588235294],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              },
+              "Prompt": {
+                "$className": "ProximityPrompt",
+                "$properties": {
+                  "ActionText": "Configure Build",
+                  "ObjectText": "Prototype Assembler",
+                  "HoldDuration": 0,
+                  "MaxActivationDistance": 10,
+                  "RequiresLineOfSight": false
+                }
+              }
             }
           },
           "Plot02": {
@@ -362,6 +394,29 @@
                 "$properties": {
                   "ActionText": "Bank Haul",
                   "ObjectText": "Salvage Intake",
+                  "HoldDuration": 0,
+                  "MaxActivationDistance": 10,
+                  "RequiresLineOfSight": false
+                }
+              }
+            },
+            "PrototypeAssembler": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": true,
+                "Size": [4, 2.5, 4],
+                "Position": [13, 1.7, 18],
+                "Color": [0.7725490196078432, 0.4549019607843137, 0.21176470588235294],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              },
+              "Prompt": {
+                "$className": "ProximityPrompt",
+                "$properties": {
+                  "ActionText": "Configure Build",
+                  "ObjectText": "Prototype Assembler",
                   "HoldDuration": 0,
                   "MaxActivationDistance": 10,
                   "RequiresLineOfSight": false

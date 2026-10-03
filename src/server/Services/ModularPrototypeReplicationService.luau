@@ -13,12 +13,27 @@ type ClientComponentEntry = {
 	ComponentId: string,
 	DisplayName: string,
 	Rarity: string,
+	Slot: string,
 	Count: number,
+}
+
+type ClientSelection = {
+	ComponentId: string,
+	DisplayName: string,
+	Rarity: string,
+}
+
+type ClientPrototypeConstruct = {
+	FrameId: string,
+	Head: ClientSelection,
+	Arm: ClientSelection,
+	Legs: ClientSelection,
 }
 
 type ClientModularSnapshot = {
 	UnbankedComponents: { ClientComponentEntry },
 	BankedComponents: { ClientComponentEntry },
+	PrototypeConstruct: ClientPrototypeConstruct?,
 }
 
 local ModularPrototypeReplicationService = {}
@@ -61,6 +76,7 @@ local function buildClientEntries(componentCounts: ModularPrototypeStateService.
 						ComponentId = componentId,
 						DisplayName = definition.DisplayName,
 						Rarity = rarity,
+						Slot = definition.Slot,
 						Count = count,
 					})
 				end
@@ -77,8 +93,42 @@ local function buildClientEntries(componentCounts: ModularPrototypeStateService.
 	return entries
 end
 
--- Both inventories are presentation copies. PrototypeConstruct remains omitted
--- until assembly gives it a real client consumer.
+local function buildClientSelection(selection: ModularPrototypeStateService.ComponentSelection): ClientSelection?
+	local definition = Components.GetDefinition(selection.ComponentId)
+	if not definition or not Components.IsValidRarity(selection.Rarity) then
+		return nil
+	end
+	return {
+		ComponentId = selection.ComponentId,
+		DisplayName = definition.DisplayName,
+		Rarity = selection.Rarity,
+	}
+end
+
+local function buildClientConstruct(
+	construct: ModularPrototypeStateService.PrototypeConstruct?
+): ClientPrototypeConstruct?
+	if not construct then
+		return nil
+	end
+
+	local head = buildClientSelection(construct.Head)
+	local arm = buildClientSelection(construct.Arm)
+	local legs = buildClientSelection(construct.Legs)
+	if construct.FrameId ~= "SmallBiped_v1" or not head or not arm or not legs then
+		return nil
+	end
+
+	return {
+		FrameId = construct.FrameId,
+		Head = head,
+		Arm = arm,
+		Legs = legs,
+	}
+end
+
+-- Inventories and the complete Construct are copied into presentation records;
+-- no private table or mutable server reference crosses the network boundary.
 local function buildSanitizedSnapshot(player: Player): ClientModularSnapshot?
 	local snapshot = ModularPrototypeStateService.GetSnapshot(player)
 	if not snapshot then
@@ -88,6 +138,7 @@ local function buildSanitizedSnapshot(player: Player): ClientModularSnapshot?
 	return {
 		UnbankedComponents = buildClientEntries(snapshot.UnbankedComponents),
 		BankedComponents = buildClientEntries(snapshot.BankedComponents),
+		PrototypeConstruct = buildClientConstruct(snapshot.PrototypeConstruct),
 	}
 end
 
@@ -150,7 +201,7 @@ function ModularPrototypeReplicationService.Start()
 		lastRequestTimes[player] = nil
 	end)
 
-	print("[ODDWORKS][ModularReplication] Sanitized unbanked/banked replication started.")
+	print("[ODDWORKS][ModularReplication] Sanitized inventory/construct replication started.")
 end
 
 return ModularPrototypeReplicationService
