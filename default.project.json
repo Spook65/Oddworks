@@ -28,6 +28,9 @@
         },
         "ActiveSalvageState": {
           "$className": "RemoteEvent"
+        },
+        "BankResult": {
+          "$className": "RemoteEvent"
         }
       },
       "Shared": {
@@ -219,6 +222,29 @@
                   "RequiresLineOfSight": false
                 }
               }
+            },
+            "SalvageIntake": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": true,
+                "Size": [4, 2.5, 4],
+                "Position": [-31, 1.7, 18],
+                "Color": [0.25882352941176473, 0.7137254901960784, 0.7450980392156863],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              },
+              "Prompt": {
+                "$className": "ProximityPrompt",
+                "$properties": {
+                  "ActionText": "Bank Haul",
+                  "ObjectText": "Salvage Intake",
+                  "HoldDuration": 0,
+                  "MaxActivationDistance": 10,
+                  "RequiresLineOfSight": false
+                }
+              }
             }
           },
           "Plot02": {
@@ -314,6 +340,29 @@
                   "ObjectText": "Workshop Upgrade",
                   "Enabled": false,
                   "HoldDuration": 0.5,
+                  "MaxActivationDistance": 10,
+                  "RequiresLineOfSight": false
+                }
+              }
+            },
+            "SalvageIntake": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": true,
+                "Size": [4, 2.5, 4],
+                "Position": [31, 1.7, 18],
+                "Color": [0.25882352941176473, 0.7137254901960784, 0.7450980392156863],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              },
+              "Prompt": {
+                "$className": "ProximityPrompt",
+                "$properties": {
+                  "ActionText": "Bank Haul",
+                  "ObjectText": "Salvage Intake",
+                  "HoldDuration": 0,
                   "MaxActivationDistance": 10,
                   "RequiresLineOfSight": false
                 }

@@ -24,6 +24,7 @@ export type ModularPrototypeState = {
 	BankedComponents: ComponentCounts,
 	PrototypeConstruct: PrototypeConstruct?,
 }
+export type BankResultCode = "BANK_SUCCESS" | "NOTHING_TO_BANK" | "BANK_OVERFLOW" | "INVALID_STATE"
 
 local ModularPrototypeStateService = {}
 
@@ -44,6 +45,15 @@ local function isPositiveInteger(value: number): boolean
 		and value ~= math.huge
 		and value ~= -math.huge
 		and value > 0
+		and math.floor(value) == value
+end
+
+local function isNonNegativeInteger(value: number): boolean
+	return typeof(value) == "number"
+		and value == value
+		and value ~= math.huge
+		and value ~= -math.huge
+		and value >= 0
 		and math.floor(value) == value
 end
 
@@ -163,6 +173,86 @@ function ModularPrototypeStateService.AddUnbankedComponent(
 	rarityCounts[rarity] = currentCount + count
 	stateChangedEvent:Fire(player)
 	return true
+end
+
+-- Banking builds and validates a complete destination copy before committing
+-- either map. With no yields in this function, a repeated prompt cannot observe
+-- the same unbanked units midway through the transaction.
+function ModularPrototypeStateService.BankAllUnbanked(player: Player): (BankResultCode, number)
+	local state = states[player]
+	if not state then
+		return "INVALID_STATE", 0
+	end
+
+	local updatedBanked: ComponentCounts = {}
+	for componentId, rarityCounts in pairs(state.BankedComponents) do
+		if not isBoundedString(componentId, MAX_COMPONENT_ID_LENGTH)
+			or not Components.GetDefinition(componentId)
+			or typeof(rarityCounts) ~= "table"
+		then
+			return "INVALID_STATE", 0
+		end
+
+		local copiedRarities: RarityCounts = {}
+		for rarity, count in pairs(rarityCounts) do
+			if not isBoundedString(rarity, MAX_RARITY_LENGTH)
+				or not Components.IsValidRarity(rarity)
+				or not isNonNegativeInteger(count)
+				or count > MAX_COMPONENTS_PER_BUCKET
+			then
+				return "INVALID_STATE", 0
+			end
+			if count > 0 then
+				copiedRarities[rarity] = count
+			end
+		end
+		if next(copiedRarities) ~= nil then
+			updatedBanked[componentId] = copiedRarities
+		end
+	end
+
+	local transferredCount = 0
+	for componentId, rarityCounts in pairs(state.UnbankedComponents) do
+		if not isBoundedString(componentId, MAX_COMPONENT_ID_LENGTH)
+			or not Components.GetDefinition(componentId)
+			or typeof(rarityCounts) ~= "table"
+		then
+			return "INVALID_STATE", 0
+		end
+
+		for rarity, count in pairs(rarityCounts) do
+			if not isBoundedString(rarity, MAX_RARITY_LENGTH)
+				or not Components.IsValidRarity(rarity)
+				or not isNonNegativeInteger(count)
+				or count > MAX_COMPONENTS_PER_BUCKET
+			then
+				return "INVALID_STATE", 0
+			end
+
+			if count > 0 then
+				local destinationRarities = updatedBanked[componentId]
+				if not destinationRarities then
+					destinationRarities = {}
+					updatedBanked[componentId] = destinationRarities
+				end
+				local currentCount = destinationRarities[rarity] or 0
+				if count > MAX_COMPONENTS_PER_BUCKET - currentCount then
+					return "BANK_OVERFLOW", 0
+				end
+				destinationRarities[rarity] = currentCount + count
+				transferredCount += count
+			end
+		end
+	end
+
+	if transferredCount == 0 then
+		return "NOTHING_TO_BANK", 0
+	end
+
+	state.BankedComponents = updatedBanked
+	state.UnbankedComponents = {}
+	stateChangedEvent:Fire(player)
+	return "BANK_SUCCESS", transferredCount
 end
 
 -- Every table crossing the service boundary is copied, including nested rarity

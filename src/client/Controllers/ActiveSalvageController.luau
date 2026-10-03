@@ -6,11 +6,16 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
-type UnbankedEntry = {
+type ComponentEntry = {
 	ComponentId: string,
 	DisplayName: string,
 	Rarity: string,
 	Count: number,
+}
+
+type ModularSnapshot = {
+	UnbankedComponents: { ComponentEntry },
+	BankedComponents: { ComponentEntry },
 }
 
 type StagePresentation = {
@@ -28,13 +33,14 @@ local ActiveSalvageController = {}
 local INITIAL_REQUEST_RETRY_SECONDS = 1.2
 local INITIAL_REQUEST_ATTEMPTS = 5
 local LOCAL_INPUT_INTERVAL_SECONDS = 0.15
-local MAX_UNBANKED_ENTRIES = 54
+local MAX_COMPONENT_ENTRIES = 54
 
 local extractionInputRequest: RemoteEvent? = nil
 local currentStage: StagePresentation? = nil
 local hasReceivedSnapshot = false
 local lastLocalInputTime = 0
 local panelToken = 0
+local bankFeedbackToken = 0
 local started = false
 
 local function requireChildOfClass(parent: Instance, childName: string, expectedClassName: string): Instance
@@ -72,24 +78,14 @@ end
 
 -- Client validation protects this temporary UI from malformed packets. It does
 -- not make the display copy authoritative or create any inventory mutation path.
-local function readUnbankedSnapshot(payload: any): { UnbankedEntry }?
-	if typeof(payload) ~= "table" or typeof(payload.UnbankedComponents) ~= "table" then
-		return nil
-	end
-	for key in pairs(payload) do
-		if key ~= "UnbankedComponents" then
-			return nil
-		end
-	end
-
-	local source = payload.UnbankedComponents
-	if #source > MAX_UNBANKED_ENTRIES then
+local function readComponentEntries(source: any): { ComponentEntry }?
+	if typeof(source) ~= "table" or #source > MAX_COMPONENT_ENTRIES then
 		return nil
 	end
 
-	local entries: { UnbankedEntry } = {}
+	local entries: { ComponentEntry } = {}
 	for index, entry in ipairs(source) do
-		if index > MAX_UNBANKED_ENTRIES
+		if index > MAX_COMPONENT_ENTRIES
 			or typeof(entry) ~= "table"
 			or not isBoundedString(entry.ComponentId, 48)
 			or not isBoundedString(entry.DisplayName, 64)
@@ -108,6 +104,33 @@ local function readUnbankedSnapshot(payload: any): { UnbankedEntry }?
 		})
 	end
 	return entries
+end
+
+-- Client validation protects this temporary UI from malformed packets. It does
+-- not make either display copy authoritative or create an inventory mutation path.
+local function readModularSnapshot(payload: any): ModularSnapshot?
+	if typeof(payload) ~= "table"
+		or typeof(payload.UnbankedComponents) ~= "table"
+		or typeof(payload.BankedComponents) ~= "table"
+	then
+		return nil
+	end
+	for key in pairs(payload) do
+		if key ~= "UnbankedComponents" and key ~= "BankedComponents" then
+			return nil
+		end
+	end
+
+	local unbankedEntries = readComponentEntries(payload.UnbankedComponents)
+	local bankedEntries = readComponentEntries(payload.BankedComponents)
+	if not unbankedEntries or not bankedEntries then
+		return nil
+	end
+
+	return {
+		UnbankedComponents = unbankedEntries,
+		BankedComponents = bankedEntries,
+	}
 end
 
 local function readStage(payload: any): StagePresentation?
@@ -139,7 +162,7 @@ local function readStage(payload: any): StagePresentation?
 	}
 end
 
-local function createPrototypeUi(): (TextLabel, Frame, TextLabel, Frame, Frame, TextButton)
+local function createPrototypeUi(): (TextLabel, TextLabel, Frame, TextLabel, Frame, Frame, TextButton)
 	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "ODDWORKSActiveSalvageGui"
@@ -149,21 +172,36 @@ local function createPrototypeUi(): (TextLabel, Frame, TextLabel, Frame, Frame, 
 	screenGui.Parent = playerGui
 
 	local haulLabel = Instance.new("TextLabel")
-	haulLabel.Name = "UnbankedHaulLabel"
+	haulLabel.Name = "ModularInventoryLabel"
 	haulLabel.AnchorPoint = Vector2.new(1, 0)
 	haulLabel.Position = UDim2.new(1, -16, 0, 16)
-	haulLabel.Size = UDim2.fromOffset(320, 250)
+	haulLabel.Size = UDim2.fromOffset(320, 390)
 	haulLabel.BackgroundColor3 = Color3.fromRGB(29, 32, 30)
 	haulLabel.BackgroundTransparency = 0.08
 	haulLabel.BorderSizePixel = 0
 	haulLabel.Font = Enum.Font.Gotham
-	haulLabel.Text = "UNBANKED HAUL\nLoading..."
+	haulLabel.Text = "UNBANKED HAUL\nLoading...\n\nBANKED COMPONENTS\nLoading..."
 	haulLabel.TextColor3 = Color3.fromRGB(245, 238, 214)
 	haulLabel.TextSize = 16
 	haulLabel.TextWrapped = true
 	haulLabel.TextXAlignment = Enum.TextXAlignment.Left
 	haulLabel.TextYAlignment = Enum.TextYAlignment.Top
 	haulLabel.Parent = screenGui
+
+	local bankFeedbackLabel = Instance.new("TextLabel")
+	bankFeedbackLabel.Name = "BankFeedbackLabel"
+	bankFeedbackLabel.AnchorPoint = Vector2.new(1, 0)
+	bankFeedbackLabel.Position = UDim2.new(1, -16, 0, 414)
+	bankFeedbackLabel.Size = UDim2.fromOffset(320, 42)
+	bankFeedbackLabel.BackgroundColor3 = Color3.fromRGB(32, 58, 57)
+	bankFeedbackLabel.BackgroundTransparency = 0.08
+	bankFeedbackLabel.BorderSizePixel = 0
+	bankFeedbackLabel.Font = Enum.Font.GothamBold
+	bankFeedbackLabel.Text = ""
+	bankFeedbackLabel.TextColor3 = Color3.fromRGB(238, 249, 223)
+	bankFeedbackLabel.TextSize = 16
+	bankFeedbackLabel.Visible = false
+	bankFeedbackLabel.Parent = screenGui
 
 	local panel = Instance.new("Frame")
 	panel.Name = "ExtractionPanel"
@@ -223,15 +261,15 @@ local function createPrototypeUi(): (TextLabel, Frame, TextLabel, Frame, Frame, 
 	pullButton.TextSize = 18
 	pullButton.Parent = panel
 
-	return haulLabel, panel, statusLabel, successWindow, indicator, pullButton
+	return haulLabel, bankFeedbackLabel, panel, statusLabel, successWindow, indicator, pullButton
 end
 
-local function renderUnbanked(haulLabel: TextLabel, entries: { UnbankedEntry })
-	local lines = { "UNBANKED HAUL" }
+local function appendInventorySection(lines: { string }, heading: string, entries: { ComponentEntry })
+	table.insert(lines, heading)
 	if #entries == 0 then
 		table.insert(lines, "Empty")
 	else
-		local visibleCount = math.min(#entries, 11)
+		local visibleCount = math.min(#entries, 7)
 		for index = 1, visibleCount do
 			local entry = entries[index]
 			table.insert(lines, string.format("%s [%s] x%d", entry.DisplayName, entry.Rarity, entry.Count))
@@ -240,7 +278,26 @@ local function renderUnbanked(haulLabel: TextLabel, entries: { UnbankedEntry })
 			table.insert(lines, string.format("...and %d more", #entries - visibleCount))
 		end
 	end
+end
+
+local function renderModularInventory(haulLabel: TextLabel, snapshot: ModularSnapshot)
+	local lines: { string } = {}
+	appendInventorySection(lines, "UNBANKED HAUL", snapshot.UnbankedComponents)
+	table.insert(lines, "")
+	appendInventorySection(lines, "BANKED COMPONENTS", snapshot.BankedComponents)
 	haulLabel.Text = table.concat(lines, "\n")
+end
+
+local function showBankFeedback(label: TextLabel, message: string, seconds: number)
+	bankFeedbackToken += 1
+	local token = bankFeedbackToken
+	label.Text = message
+	label.Visible = true
+	task.delay(seconds, function()
+		if bankFeedbackToken == token then
+			label.Visible = false
+		end
+	end)
 end
 
 local function showTemporaryMessage(panel: Frame, statusLabel: TextLabel, message: string, seconds: number)
@@ -295,16 +352,34 @@ function ActiveSalvageController.Start()
 	local modularStateSnapshot = requireChildOfClass(networkFolder, "ModularStateSnapshot", "RemoteEvent") :: RemoteEvent
 	extractionInputRequest = requireChildOfClass(networkFolder, "ExtractionInputRequest", "RemoteEvent") :: RemoteEvent
 	local activeState = requireChildOfClass(networkFolder, "ActiveSalvageState", "RemoteEvent") :: RemoteEvent
-	local haulLabel, panel, statusLabel, successWindow, indicator, pullButton = createPrototypeUi()
+	local bankResult = requireChildOfClass(networkFolder, "BankResult", "RemoteEvent") :: RemoteEvent
+	local haulLabel, bankFeedbackLabel, panel, statusLabel, successWindow, indicator, pullButton = createPrototypeUi()
 
 	modularStateSnapshot.OnClientEvent:Connect(function(payload: any)
-		local entries = readUnbankedSnapshot(payload)
-		if not entries then
+		local snapshot = readModularSnapshot(payload)
+		if not snapshot then
 			warn("[ODDWORKS][ActiveSalvageController] Ignored invalid ModularStateSnapshot payload.")
 			return
 		end
-		renderUnbanked(haulLabel, entries)
+		renderModularInventory(haulLabel, snapshot)
 		hasReceivedSnapshot = true
+	end)
+
+	bankResult.OnClientEvent:Connect(function(resultCode: any, transferredCount: any, ...: any)
+		if select("#", ...) ~= 0 or typeof(resultCode) ~= "string" then
+			return
+		end
+
+		if resultCode == "BANK_SUCCESS" and isPositiveInteger(transferredCount) then
+			local suffix = if transferredCount == 1 then "" else "S"
+			showBankFeedback(bankFeedbackLabel, string.format("BANKED %d COMPONENT%s", transferredCount, suffix), 2.5)
+		elseif resultCode == "NOTHING_TO_BANK" and (transferredCount == 0 or transferredCount == nil) then
+			showBankFeedback(bankFeedbackLabel, "Nothing to bank.", 2)
+		elseif resultCode == "BANK_OVERFLOW" and (transferredCount == 0 or transferredCount == nil) then
+			showBankFeedback(bankFeedbackLabel, "Banking failed: storage bucket full.", 3)
+		elseif resultCode == "INVALID_STATE" or resultCode == "BANK_REJECTED" then
+			showBankFeedback(bankFeedbackLabel, "Banking unavailable.", 2)
+		end
 	end)
 
 	activeState.OnClientEvent:Connect(function(payload: any)

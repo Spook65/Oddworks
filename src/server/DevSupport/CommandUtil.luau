@@ -7,7 +7,9 @@ local Config = ServerRoot:WaitForChild("Config")
 
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
 local OddlingDisplayService = require(Services:WaitForChild("OddlingDisplayService"))
+local ModularPrototypeStateService = require(Services:WaitForChild("ModularPrototypeStateService"))
 local Oddlings = require(Config:WaitForChild("Oddlings"))
+local Components = require(Config:WaitForChild("Components"))
 local Recipes = require(Config:WaitForChild("Recipes"))
 local WorkshopLevels = require(Config:WaitForChild("WorkshopLevels"))
 
@@ -19,6 +21,7 @@ local MUTATION_CAPS = table.freeze({
 	ScrapPerInvocation = 1_000_000,
 	HypePerInvocation = 1_000_000,
 	OddlingsPerInvocation = 100,
+	ComponentsPerInvocation = 999,
 })
 
 -- Revalidates numeric arguments at the production API boundary because Cmdr's
@@ -61,6 +64,19 @@ local function formatEnabledSet(values: { [string]: boolean }): string
 	end
 	table.sort(keys)
 	return if #keys > 0 then table.concat(keys, ", ") else "<none>"
+end
+
+local function formatComponentCounts(values: { [string]: { [string]: number } }): string
+	local entries: { string } = {}
+	for componentId, rarityCounts in pairs(values) do
+		for rarity, count in pairs(rarityCounts) do
+			if count > 0 then
+				table.insert(entries, string.format("%s[%s]=%d", componentId, rarity, count))
+			end
+		end
+	end
+	table.sort(entries)
+	return if #entries > 0 then table.concat(entries, ", ") else "<none>"
 end
 
 -- Logs only high-level mutation metadata so setup actions are auditable without
@@ -155,6 +171,59 @@ function CommandUtil.GiveOddling(context: any, player: Player, speciesId: string
 
 	CommandUtil.LogMutation(context, "ow-give-oddling", player, string.format("+%d %s", count, speciesId))
 	return string.format("Granted %d %s ownership to %s.", count, speciesId, player.Name)
+end
+
+-- This diagnostic reports only a defensive snapshot from the temporary-state
+-- owner; it cannot expose or replace the private inventory maps.
+function CommandUtil.DescribeModularState(player: Player): string
+	local snapshot = ModularPrototypeStateService.GetSnapshot(player)
+	if not snapshot then
+		return string.format("No temporary modular state exists for %s.", player.Name)
+	end
+
+	local constructDescription = if snapshot.PrototypeConstruct then snapshot.PrototypeConstruct.FrameId else "<none>"
+	return string.format(
+		"%s | Unbanked={%s} | Banked={%s} | PrototypeConstruct=%s",
+		player.Name,
+		formatComponentCounts(snapshot.UnbankedComponents),
+		formatComponentCounts(snapshot.BankedComponents),
+		constructDescription
+	)
+end
+
+-- Grants only validated unbanked prototype inventory through the same bounded
+-- API used by salvage rewards. This supports Studio setup without raw-state writes.
+function CommandUtil.GiveComponent(
+	context: any,
+	player: Player,
+	componentId: string,
+	rarity: string,
+	count: number
+): string
+	if not Components.GetDefinition(componentId) then
+		return string.format("Unknown configured component: %s", componentId)
+	end
+	if not Components.IsValidRarity(rarity) then
+		return string.format("Unknown configured rarity: %s", rarity)
+	end
+	if not isPositiveFiniteInteger(count) or count > MUTATION_CAPS.ComponentsPerInvocation then
+		return string.format(
+			"Component grant rejected: count must be between 1 and %d.",
+			MUTATION_CAPS.ComponentsPerInvocation
+		)
+	end
+
+	if not ModularPrototypeStateService.AddUnbankedComponent(player, componentId, rarity, count) then
+		return "Component grant rejected: state is unavailable or the destination bucket would exceed 999."
+	end
+
+	CommandUtil.LogMutation(
+		context,
+		"ow-give-component",
+		player,
+		string.format("+%d Unbanked %s [%s]", count, componentId, rarity)
+	)
+	return string.format("Granted %d unbanked %s [%s] to %s.", count, componentId, rarity, player.Name)
 end
 
 -- Advances only to the next configured level. It intentionally bypasses Hype

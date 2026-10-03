@@ -18,6 +18,7 @@ type ClientComponentEntry = {
 
 type ClientModularSnapshot = {
 	UnbankedComponents: { ClientComponentEntry },
+	BankedComponents: { ClientComponentEntry },
 }
 
 local ModularPrototypeReplicationService = {}
@@ -49,16 +50,9 @@ local function requireChildOfClass(parent: Instance, childName: string, expected
 	return child
 end
 
--- The client receives only the unbanked fields needed by this prototype UI.
--- Banked state and future construct records remain server-only until they have a consumer.
-local function buildSanitizedSnapshot(player: Player): ClientModularSnapshot?
-	local snapshot = ModularPrototypeStateService.GetSnapshot(player)
-	if not snapshot then
-		return nil
-	end
-
+local function buildClientEntries(componentCounts: ModularPrototypeStateService.ComponentCounts): { ClientComponentEntry }
 	local entries: { ClientComponentEntry } = {}
-	for componentId, rarityCounts in pairs(snapshot.UnbankedComponents) do
+	for componentId, rarityCounts in pairs(componentCounts) do
 		local definition = Components.GetDefinition(componentId)
 		if definition then
 			for rarity, count in pairs(rarityCounts) do
@@ -80,9 +74,20 @@ local function buildSanitizedSnapshot(player: Player): ClientModularSnapshot?
 		end
 		return left.ComponentId < right.ComponentId
 	end)
+	return entries
+end
+
+-- Both inventories are presentation copies. PrototypeConstruct remains omitted
+-- until assembly gives it a real client consumer.
+local function buildSanitizedSnapshot(player: Player): ClientModularSnapshot?
+	local snapshot = ModularPrototypeStateService.GetSnapshot(player)
+	if not snapshot then
+		return nil
+	end
 
 	return {
-		UnbankedComponents = entries,
+		UnbankedComponents = buildClientEntries(snapshot.UnbankedComponents),
+		BankedComponents = buildClientEntries(snapshot.BankedComponents),
 	}
 end
 
@@ -145,7 +150,7 @@ function ModularPrototypeReplicationService.Start()
 		lastRequestTimes[player] = nil
 	end)
 
-	print("[ODDWORKS][ModularReplication] Sanitized unbanked-state replication started.")
+	print("[ODDWORKS][ModularReplication] Sanitized unbanked/banked replication started.")
 end
 
 return ModularPrototypeReplicationService
