@@ -80,7 +80,8 @@ local PrototypeConstructRuntimeService = {}
 local runtimeConstructsFolder: Folder? = nil
 local pendingReconciliations: { [Player]: boolean } = {}
 local suppressRecovery: { [Player]: boolean } = {}
-local modelConnections: { [Player]: RBXScriptConnection } = {}
+local modelConnections: { [Player]: { RBXScriptConnection } } = {}
+local watchedRuntimeModels: { [Player]: Model } = {}
 local containerConnections: { [Player]: RBXScriptConnection } = {}
 local recoveryGenerations: { [Player]: number } = {}
 local warningKeys: { [string]: boolean } = {}
@@ -543,6 +544,17 @@ local function disconnectConnection(map: { [Player]: RBXScriptConnection }, play
 	end
 end
 
+local function disconnectModelConnections(player: Player)
+	local connections = modelConnections[player]
+	if connections then
+		for _, connection in ipairs(connections) do
+			connection:Disconnect()
+		end
+	end
+	modelConnections[player] = nil
+	watchedRuntimeModels[player] = nil
+end
+
 local function getExistingPlayerContainer(player: Player): Folder?
 	local runtimeFolder = runtimeConstructsFolder
 	if not runtimeFolder then
@@ -564,7 +576,7 @@ local function removeRuntime(player: Player, destroyContainer: boolean)
 
 	recoveryGenerations[player] = (recoveryGenerations[player] or 0) + 1
 	suppressRecovery[player] = true
-	disconnectConnection(modelConnections, player)
+	disconnectModelConnections(player)
 	if destroyContainer then
 		disconnectConnection(containerConnections, player)
 	end
@@ -635,19 +647,46 @@ local function getOrCreatePlayerContainer(player: Player): Folder?
 	return container
 end
 
-local function watchRuntimeModel(player: Player, model: Model)
-	disconnectConnection(modelConnections, player)
-	local generation = recoveryGenerations[player] or 0
-	modelConnections[player] = model.DescendantRemoving:Connect(function()
-		if suppressRecovery[player] then
-			return
+local function scheduleIntegrityReconcile(player: Player, model: Model, generation: number)
+	if suppressRecovery[player] then
+		return
+	end
+
+	-- The post-removal callbacks below may overlap. The watched-model and
+	-- generation checks collapse stale callbacks after a service-owned rebuild.
+	task.defer(function()
+		if not suppressRecovery[player]
+			and recoveryGenerations[player] == generation
+			and watchedRuntimeModels[player] == model
+		then
+			queueReconcile(player)
 		end
-		task.defer(function()
-			if not suppressRecovery[player] and recoveryGenerations[player] == generation then
-				queueReconcile(player)
-			end
-		end)
 	end)
+end
+
+local function watchRuntimeModel(player: Player, model: Model)
+	disconnectModelConnections(player)
+	local generation = recoveryGenerations[player] or 0
+	local rootPart = model:FindFirstChild(ROOT_PART_NAME)
+	local connections: { RBXScriptConnection } = {}
+	watchedRuntimeModels[player] = model
+
+	-- DescendantRemoving covers nested visual corruption. ChildRemoved signals
+	-- direct frame/module removal after the hierarchy has actually changed,
+	-- avoiding reliance on only the pre-removal event for required modules.
+	table.insert(connections, model.DescendantRemoving:Connect(function()
+		scheduleIntegrityReconcile(player, model, generation)
+	end))
+	table.insert(connections, model.ChildRemoved:Connect(function()
+		scheduleIntegrityReconcile(player, model, generation)
+	end))
+	if rootPart and rootPart:IsA("BasePart") then
+		table.insert(connections, rootPart.ChildRemoved:Connect(function()
+			scheduleIntegrityReconcile(player, model, generation)
+		end))
+	end
+
+	modelConnections[player] = connections
 end
 
 function PrototypeConstructRuntimeService.Reconcile(player: Player): boolean
@@ -696,7 +735,7 @@ function PrototypeConstructRuntimeService.Reconcile(player: Player): boolean
 		end
 	end
 	if modelCount == 1 and candidate and isRuntimeModelValid(player, candidate, construct, targetRootCFrame, plotId) then
-		if not modelConnections[player] then
+		if not modelConnections[player] or watchedRuntimeModels[player] ~= candidate then
 			watchRuntimeModel(player, candidate)
 		end
 		return true
@@ -704,7 +743,7 @@ function PrototypeConstructRuntimeService.Reconcile(player: Player): boolean
 
 	recoveryGenerations[player] = (recoveryGenerations[player] or 0) + 1
 	suppressRecovery[player] = true
-	disconnectConnection(modelConnections, player)
+	disconnectModelConnections(player)
 	for _, child in ipairs(container:GetChildren()) do
 		child:Destroy()
 	end
