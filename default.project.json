@@ -1009,6 +1009,81 @@
               }
             }
           },
+          "OuterYardClownMaskCache": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [4, 3, 4],
+              "Position": [-12, 1.975, 38],
+              "Color": [0.9019607843137255, 0.9019607843137255, 0.8431372549019608],
+              "Material": "CorrodedMetal",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            },
+            "Prompt": {
+              "$className": "ProximityPrompt",
+              "$properties": {
+                "ActionText": "Recover",
+                "ObjectText": "Clown Mask Cache",
+                "HoldDuration": 0,
+                "MaxActivationDistance": 10,
+                "RequiresLineOfSight": false
+              }
+            }
+          },
+          "OuterYardRustClawCache": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [4, 3, 4],
+              "Position": [12, 1.975, 38],
+              "Color": [0.5176470588235295, 0.27450980392156865, 0.1607843137254902],
+              "Material": "CorrodedMetal",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            },
+            "Prompt": {
+              "$className": "ProximityPrompt",
+              "$properties": {
+                "ActionText": "Recover",
+                "ObjectText": "Rust Claw Cache",
+                "HoldDuration": 0,
+                "MaxActivationDistance": 10,
+                "RequiresLineOfSight": false
+              }
+            }
+          },
+          "OuterYardStitchedBootsCache": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [4, 3, 4],
+              "Position": [0, 1.975, 43],
+              "Color": [0.2784313725490196, 0.396078431372549, 0.5725490196078431],
+              "Material": "CorrodedMetal",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            },
+            "Prompt": {
+              "$className": "ProximityPrompt",
+              "$properties": {
+                "ActionText": "Recover",
+                "ObjectText": "Stitched Boots Cache",
+                "HoldDuration": 0,
+                "MaxActivationDistance": 10,
+                "RequiresLineOfSight": false
+              }
+            }
+          },
           "Salvage01": {
             "$className": "Part",
             "$properties": {

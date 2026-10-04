@@ -77,6 +77,13 @@ end
 
 local SalvageService = require(salvageServiceModule)
 
+local outerYardSalvageServiceModule = Services:WaitForChild("OuterYardSalvageService")
+if not outerYardSalvageServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.OuterYardSalvageService must be a ModuleScript.")
+end
+
+local OuterYardSalvageService = require(outerYardSalvageServiceModule)
+
 local activeSalvageEncounterServiceModule = Services:WaitForChild("ActiveSalvageEncounterService")
 if not activeSalvageEncounterServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.ActiveSalvageEncounterService must be a ModuleScript.")
@@ -187,6 +194,7 @@ WorkshopBankingService.Start()
 PrototypeAssemblyService.Start()
 PrototypeConstructRuntimeService.Start()
 SalvageService.Start()
+OuterYardSalvageService.Start()
 ActiveSalvageEncounterService.Start()
 CraftingService.Start()
 -- Persistence starts after every state consumer has registered its listeners.
