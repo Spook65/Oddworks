@@ -321,9 +321,23 @@ Runtime display construction must:
 
 No Instance, Model, socket CFrame, or runtime part reference belongs in authoritative player state. Deleting the derived Model must not delete component ownership or PrototypeConstruct state; reconciliation should rebuild it.
 
-## Art Source and Runtime Paths
+### 0.2E Prototype Placement
 
-Future assets should use these repository roles:
+The repository authors one non-authoritative `PrototypeConstructDisplay` marker and one visible `PrototypeConstructPad` beneath each plot. These do not replace workshop assignment or Construct state.
+
+- Plot01 marker: `CFrame.new(-22, 0.45, 0)`
+- Plot02 marker: `CFrame.new(22, 0.45, 0)`
+- marker rotation: identity, so the Construct faces Roblox `-Z`
+- pad center: marker position minus `Vector3.new(0, 0.1, 0)`
+- pad size: `Vector3.new(7, 0.2, 5)`
+
+The marker CFrame represents the standing surface. The runtime service places RootPart at `marker.CFrame * CFrame.new(0, 3, 0)`, preserving the frozen root-local ground plane at `Y = -3`. The markers are separate from `OddlingDisplaySlots`, the assembler, and the salvage intake.
+
+For the 0.2E technical proof, `default.project.json` maps the primitive frame and six primitive module templates beneath `ServerStorage.ODDWORKSAssets.Constructs`. These repository-authored primitives prove hierarchy, socket alignment, Motor6D binding, and reconstruction only; they are not final Blender art.
+
+## Production Replacement Paths
+
+Future Blender replacements for the 0.2E primitive templates should use these repository roles:
 
 ```text
 assets/source/blender/constructs/small_biped_v1.blend
@@ -334,7 +348,7 @@ assets/roblox/constructs/SmallBiped_v1_Frame.rbxm
 assets/roblox/components/<ArtModel>.rbxm
 ```
 
-The exact Rojo mapping should be added only when the first runtime consumer is implemented. Runtime templates should live under a server-only Constructs asset hierarchy, separate from Signature Oddlings.
+The 0.2E primitive proof is currently authored directly through `default.project.json`. A later art pass may replace those entries with the versioned Roblox model paths above without changing the server-only runtime contract. Runtime templates live under a Constructs asset hierarchy separate from Signature Oddlings.
 
 ## Naming Contract
 

@@ -126,6 +126,13 @@ end
 
 local PrototypeAssemblyService = require(prototypeAssemblyServiceModule)
 
+local prototypeConstructRuntimeServiceModule = Services:WaitForChild("PrototypeConstructRuntimeService")
+if not prototypeConstructRuntimeServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.PrototypeConstructRuntimeService must be a ModuleScript.")
+end
+
+local PrototypeConstructRuntimeService = require(prototypeConstructRuntimeServiceModule)
+
 local devHarnessServiceModule = Services:WaitForChild("DevHarnessService")
 if not devHarnessServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.DevHarnessService must be a ModuleScript.")
@@ -178,6 +185,7 @@ HypeService.Start()
 WorkshopUpgradeService.Start()
 WorkshopBankingService.Start()
 PrototypeAssemblyService.Start()
+PrototypeConstructRuntimeService.Start()
 SalvageService.Start()
 ActiveSalvageEncounterService.Start()
 CraftingService.Start()

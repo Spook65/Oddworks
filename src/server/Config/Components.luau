@@ -7,6 +7,7 @@ export type ComponentDefinition = {
 	ComponentId: string,
 	DisplayName: string,
 	Slot: ComponentSlot,
+	ArtModel: string,
 	CompatibleFrames: { [string]: boolean },
 }
 
@@ -17,36 +18,42 @@ local definitions: { [string]: ComponentDefinition } = {
 		ComponentId = "ClownMask",
 		DisplayName = "Clown Mask",
 		Slot = "Head",
+		ArtModel = "ClownMask_Prototype",
 		CompatibleFrames = { SmallBiped_v1 = true },
 	},
 	SignalScanner = {
 		ComponentId = "SignalScanner",
 		DisplayName = "Signal Scanner",
 		Slot = "Head",
+		ArtModel = "SignalScanner_Prototype",
 		CompatibleFrames = { SmallBiped_v1 = true },
 	},
 	RustClaw = {
 		ComponentId = "RustClaw",
 		DisplayName = "Rust Claw",
 		Slot = "Arm",
+		ArtModel = "RustClaw_Prototype",
 		CompatibleFrames = { SmallBiped_v1 = true },
 	},
 	ServoArm = {
 		ComponentId = "ServoArm",
 		DisplayName = "Servo Arm",
 		Slot = "Arm",
+		ArtModel = "ServoArm_Prototype",
 		CompatibleFrames = { SmallBiped_v1 = true },
 	},
 	StitchedBoots = {
 		ComponentId = "StitchedBoots",
 		DisplayName = "Stitched Boots",
 		Slot = "Legs",
+		ArtModel = "StitchedBoots_Prototype",
 		CompatibleFrames = { SmallBiped_v1 = true },
 	},
 	SpringLegs = {
 		ComponentId = "SpringLegs",
 		DisplayName = "Spring Legs",
 		Slot = "Legs",
+		ArtModel = "SpringLegs_Prototype",
 		CompatibleFrames = { SmallBiped_v1 = true },
 	},
 }
@@ -64,6 +71,7 @@ local function copyDefinition(definition: ComponentDefinition): ComponentDefinit
 		ComponentId = definition.ComponentId,
 		DisplayName = definition.DisplayName,
 		Slot = definition.Slot,
+		ArtModel = definition.ArtModel,
 		CompatibleFrames = table.clone(definition.CompatibleFrames),
 	}
 end
