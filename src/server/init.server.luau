@@ -84,6 +84,13 @@ end
 
 local OuterYardSalvageService = require(outerYardSalvageServiceModule)
 
+local deepBayServiceModule = Services:WaitForChild("DeepBayService")
+if not deepBayServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.DeepBayService must be a ModuleScript.")
+end
+
+local DeepBayService = require(deepBayServiceModule)
+
 local activeSalvageEncounterServiceModule = Services:WaitForChild("ActiveSalvageEncounterService")
 if not activeSalvageEncounterServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.ActiveSalvageEncounterService must be a ModuleScript.")
@@ -195,6 +202,7 @@ PrototypeAssemblyService.Start()
 PrototypeConstructRuntimeService.Start()
 SalvageService.Start()
 OuterYardSalvageService.Start()
+DeepBayService.Start()
 ActiveSalvageEncounterService.Start()
 CraftingService.Start()
 -- Persistence starts after every state consumer has registered its listeners.

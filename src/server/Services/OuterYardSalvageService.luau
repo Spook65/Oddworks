@@ -199,4 +199,20 @@ function OuterYardSalvageService.Start()
 	print(string.format("[ODDWORKS][OuterYardSalvage] Service started with %d per-player opportunities.", EXPECTED_OPPORTUNITY_COUNT))
 end
 
+-- Route eligibility is progress, not inventory ownership: banking or later
+-- losing a starter component does not erase the three session claims.
+function OuterYardSalvageService.HasClaimedAllStarterOpportunities(player: Player): boolean
+	local claims = claimedByPlayer[player]
+	if not claims then
+		return false
+	end
+
+	for _, definition in ipairs(OuterYardSalvageConfig.GetAllOpportunities()) do
+		if not claims[definition.OpportunityId] then
+			return false
+		end
+	end
+	return true
+end
+
 return OuterYardSalvageService

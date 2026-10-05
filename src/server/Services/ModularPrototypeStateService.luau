@@ -26,6 +26,7 @@ export type ModularPrototypeState = {
 	PrototypeConstruct: PrototypeConstruct?,
 }
 export type BankResultCode = "BANK_SUCCESS" | "NOTHING_TO_BANK" | "BANK_OVERFLOW" | "INVALID_STATE"
+export type DiscardResultCode = "DISCARD_SUCCESS" | "NOTHING_TO_DISCARD" | "INVALID_STATE"
 export type AssemblyResultCode =
 	"ASSEMBLY_SUCCESS"
 	| "INVALID_STATE"
@@ -372,6 +373,35 @@ function ModularPrototypeStateService.BankAllUnbanked(player: Player): (BankResu
 	state.UnbankedComponents = {}
 	stateChangedEvent:Fire(player)
 	return "BANK_SUCCESS", transferredCount
+end
+
+-- Deep Bay failure clears only the current session's vulnerable haul. The
+-- validated copy is used to calculate the complete result before one no-yield
+-- commit and one replication notification.
+function ModularPrototypeStateService.DiscardAllUnbanked(player: Player): (DiscardResultCode, number)
+	local state = states[player]
+	if not state then
+		return "INVALID_STATE", 0
+	end
+
+	local validatedUnbanked = copyValidatedComponentCounts(state.UnbankedComponents)
+	if not validatedUnbanked then
+		return "INVALID_STATE", 0
+	end
+
+	local discardedCount = 0
+	for _, rarityCounts in pairs(validatedUnbanked) do
+		for _, count in pairs(rarityCounts) do
+			discardedCount += count
+		end
+	end
+	if discardedCount == 0 then
+		return "NOTHING_TO_DISCARD", 0
+	end
+
+	state.UnbankedComponents = {}
+	stateChangedEvent:Fire(player)
+	return "DISCARD_SUCCESS", discardedCount
 end
 
 -- Assembly and rebuild use a virtual inventory pool. Existing modules are

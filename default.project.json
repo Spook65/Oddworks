@@ -943,6 +943,172 @@
             }
           }
         },
+        "DeepBay": {
+          "$className": "Model",
+          "CorridorFloor": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [8, 0.2, 22],
+              "Position": [41, 0.1, 43.5],
+              "Color": [0.1843137254901961, 0.2, 0.2235294117647059],
+              "Material": "DiamondPlate",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            }
+          },
+          "LeftRail": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [0.5, 8, 22],
+              "Position": [36.75, 4.1, 43.5],
+              "Color": [0.34509803921568627, 0.3764705882352941, 0.4117647058823529],
+              "Material": "CorrodedMetal",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            }
+          },
+          "RightRail": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [0.5, 8, 22],
+              "Position": [45.25, 4.1, 43.5],
+              "Color": [0.34509803921568627, 0.3764705882352941, 0.4117647058823529],
+              "Material": "CorrodedMetal",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            }
+          },
+          "FarBarrier": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [9, 8, 0.5],
+              "Position": [41, 4.1, 54.75],
+              "Color": [0.34509803921568627, 0.3764705882352941, 0.4117647058823529],
+              "Material": "CorrodedMetal",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            }
+          },
+          "EntranceMarker": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CanQuery": false,
+              "CanTouch": false,
+              "Size": [8, 0.25, 1],
+              "Position": [41, 0.325, 33.5],
+              "Color": [0.9294117647058824, 0.7529411764705882, 0.28627450980392155],
+              "Material": "Neon"
+            }
+          },
+          "EntranceIndicator": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CanQuery": false,
+              "CanTouch": false,
+              "Size": [6, 1, 0.5],
+              "Position": [41, 4, 33.5],
+              "Transparency": 1
+            }
+          },
+          "SafeReturnMarker": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CanQuery": false,
+              "CanTouch": false,
+              "Size": [6, 0.15, 3],
+              "Position": [41, 0.275, 36.5],
+              "Color": [0.2823529411764706, 0.8392156862745098, 0.5372549019607843],
+              "Material": "Neon",
+              "Transparency": 0.3
+            }
+          },
+          "MagneticSweeperVolume": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CanQuery": false,
+              "CanTouch": false,
+              "Size": [8, 6, 4],
+              "Position": [41, 3.2, 43.5],
+              "Color": [1, 0.7490196078431373, 0.25098039215686274],
+              "Material": "Neon",
+              "Transparency": 0.55
+            }
+          },
+          "SweeperPhaseIndicator": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CanQuery": false,
+              "CanTouch": false,
+              "Size": [6, 1.25, 0.5],
+              "Position": [41, 5.25, 43.5],
+              "Color": [1, 0.7490196078431373, 0.25098039215686274],
+              "Material": "Neon"
+            }
+          },
+          "SignalScannerCache": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [4, 3, 4],
+              "Position": [41, 1.7, 52],
+              "Color": [0.17647058823529413, 0.5843137254901961, 0.6509803921568628],
+              "Material": "Metal",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            },
+            "Prompt": {
+              "$className": "ProximityPrompt",
+              "$properties": {
+                "ActionText": "Recover",
+                "ObjectText": "Rare Signal Scanner",
+                "HoldDuration": 0,
+                "MaxActivationDistance": 5,
+                "RequiresLineOfSight": true
+              }
+            }
+          },
+          "SignalScannerClaimVolume": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CanQuery": false,
+              "CanTouch": false,
+              "Size": [7.5, 6, 5],
+              "Position": [41, 3.2, 51.5],
+              "Transparency": 1
+            }
+          }
+        },
         "SalvageField": {
           "$className": "Part",
           "$properties": {
