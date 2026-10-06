@@ -48,6 +48,13 @@ end
 
 local AssemblyController = require(assemblyControllerModule)
 
+local signalDiscoveryControllerModule = Controllers:WaitForChild("SignalDiscoveryController")
+if not signalDiscoveryControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.SignalDiscoveryController must be a ModuleScript.")
+end
+
+local SignalDiscoveryController = require(signalDiscoveryControllerModule)
+
 local devConsoleControllerModule = Controllers:WaitForChild("DevConsoleController")
 if not devConsoleControllerModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Client] Client.Controllers.DevConsoleController must be a ModuleScript.")
@@ -61,6 +68,7 @@ HudController.Start()
 CraftingController.Start()
 ActiveSalvageController.Start()
 AssemblyController.Start()
+SignalDiscoveryController.Start()
 -- The controller exits immediately outside Studio; the server remains the
 -- actual authorization boundary even when the development UI is visible.
 DevConsoleController.Start()

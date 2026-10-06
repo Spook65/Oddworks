@@ -147,6 +147,13 @@ end
 
 local PrototypeConstructRuntimeService = require(prototypeConstructRuntimeServiceModule)
 
+local signatureDiscoveryServiceModule = Services:WaitForChild("SignatureDiscoveryService")
+if not signatureDiscoveryServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.SignatureDiscoveryService must be a ModuleScript.")
+end
+
+local SignatureDiscoveryService = require(signatureDiscoveryServiceModule)
+
 local devHarnessServiceModule = Services:WaitForChild("DevHarnessService")
 if not devHarnessServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.DevHarnessService must be a ModuleScript.")
@@ -200,6 +207,7 @@ WorkshopUpgradeService.Start()
 WorkshopBankingService.Start()
 PrototypeAssemblyService.Start()
 PrototypeConstructRuntimeService.Start()
+SignatureDiscoveryService.Start()
 SalvageService.Start()
 OuterYardSalvageService.Start()
 DeepBayService.Start()
