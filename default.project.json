@@ -78,30 +78,20 @@
                 "CanQuery": false,
                 "CanTouch": false,
                 "Massless": true,
-                "Size": [1, 1, 1],
-                "Position": [0, 0, 0],
+                "Size": [
+                  1,
+                  1,
+                  1
+                ],
+                "Position": [
+                  0,
+                  0,
+                  0
+                ],
                 "Transparency": 1
-              },
-              "HeadSocket": {
-                "$className": "Attachment",
-                "$properties": {
-                  "Position": [0, 1.5, 0]
-                }
-              },
-              "ArmSocket": {
-                "$className": "Attachment",
-                "$properties": {
-                  "Position": [0, 0.25, 0]
-                }
-              },
-              "LegsSocket": {
-                "$className": "Attachment",
-                "$properties": {
-                  "Position": [0, -1.25, 0]
-                }
               }
             },
-            "Chassis": {
+            "Pelvis": {
               "$className": "Part",
               "$properties": {
                 "Anchored": false,
@@ -109,9 +99,406 @@
                 "CanQuery": false,
                 "CanTouch": false,
                 "Massless": true,
-                "Size": [2, 2.2, 1.3],
-                "Position": [0, 0, 0],
-                "Color": [0.3607843137254902, 0.4, 0.44313725490196076],
+                "Size": [
+                  1.7,
+                  0.75,
+                  1.15
+                ],
+                "Position": [
+                  0,
+                  -0.65,
+                  0
+                ],
+                "Color": [
+                  0.25098039215686274,
+                  0.28627450980392155,
+                  0.3137254901960784
+                ],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              }
+            },
+            "Torso": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": false,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Massless": true,
+                "Size": [
+                  2.1,
+                  1.65,
+                  1.3
+                ],
+                "Position": [
+                  0,
+                  0.35,
+                  0
+                ],
+                "Color": [
+                  0.3215686274509804,
+                  0.42745098039215684,
+                  0.43137254901960786
+                ],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              }
+            },
+            "ChestPlate": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": false,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Massless": true,
+                "Size": [
+                  1.5,
+                  0.72,
+                  0.18
+                ],
+                "Position": [
+                  0,
+                  0.45,
+                  -0.73
+                ],
+                "Color": [
+                  0.8313725490196079,
+                  0.596078431372549,
+                  0.21176470588235294
+                ],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              }
+            },
+            "Neck": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": false,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Massless": true,
+                "Size": [
+                  0.65,
+                  0.4,
+                  0.65
+                ],
+                "Position": [
+                  0,
+                  1.22,
+                  0
+                ],
+                "Color": [
+                  0.1843137254901961,
+                  0.2,
+                  0.2235294117647059
+                ],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              }
+            },
+            "HeadBase": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": false,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Massless": true,
+                "Size": [
+                  2,
+                  1.7,
+                  1.65
+                ],
+                "Position": [
+                  0,
+                  1.75,
+                  0
+                ],
+                "Shape": "Ball",
+                "Color": [
+                  0.42745098039215684,
+                  0.5019607843137255,
+                  0.4980392156862745
+                ],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              },
+              "HeadEquipmentAnchor": {
+                "$className": "Attachment",
+                "$properties": {
+                  "Position": [
+                    0,
+                    0,
+                    -0.825
+                  ]
+                }
+              }
+            },
+            "LeftShoulder": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": false,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Massless": true,
+                "Size": [
+                  0.8,
+                  0.8,
+                  0.8
+                ],
+                "Position": [
+                  -1.22,
+                  0.82,
+                  0
+                ],
+                "Shape": "Ball",
+                "Color": [
+                  0.8313725490196079,
+                  0.596078431372549,
+                  0.21176470588235294
+                ],
+                "Material": "Metal"
+              }
+            },
+            "RightShoulder": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": false,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Massless": true,
+                "Size": [
+                  0.8,
+                  0.8,
+                  0.8
+                ],
+                "Position": [
+                  1.22,
+                  0.82,
+                  0
+                ],
+                "Shape": "Ball",
+                "Color": [
+                  0.8313725490196079,
+                  0.596078431372549,
+                  0.21176470588235294
+                ],
+                "Material": "Metal"
+              }
+            },
+            "LeftArm": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": false,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Massless": true,
+                "Size": [
+                  0.7,
+                  1.9,
+                  0.75
+                ],
+                "Position": [
+                  -1.45,
+                  0.2,
+                  0
+                ],
+                "Color": [
+                  0.3215686274509804,
+                  0.42745098039215684,
+                  0.43137254901960786
+                ],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              },
+              "LeftArmEquipmentAnchor": {
+                "$className": "Attachment",
+                "$properties": {
+                  "Position": [
+                    0,
+                    -0.35,
+                    -0.375
+                  ]
+                }
+              }
+            },
+            "RightArm": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": false,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Massless": true,
+                "Size": [
+                  0.7,
+                  1.9,
+                  0.75
+                ],
+                "Position": [
+                  1.45,
+                  0.2,
+                  0
+                ],
+                "Color": [
+                  0.3215686274509804,
+                  0.42745098039215684,
+                  0.43137254901960786
+                ],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              },
+              "RightArmEquipmentAnchor": {
+                "$className": "Attachment",
+                "$properties": {
+                  "Position": [
+                    0,
+                    -0.35,
+                    -0.375
+                  ]
+                }
+              }
+            },
+            "LeftLeg": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": false,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Massless": true,
+                "Size": [
+                  0.8,
+                  1.8,
+                  0.9
+                ],
+                "Position": [
+                  -0.55,
+                  -1.85,
+                  0
+                ],
+                "Color": [
+                  0.2823529411764706,
+                  0.3333333333333333,
+                  0.35294117647058826
+                ],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              },
+              "LeftLegEquipmentAnchor": {
+                "$className": "Attachment",
+                "$properties": {
+                  "Position": [
+                    0,
+                    -0.45,
+                    -0.45
+                  ]
+                }
+              }
+            },
+            "RightLeg": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": false,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Massless": true,
+                "Size": [
+                  0.8,
+                  1.8,
+                  0.9
+                ],
+                "Position": [
+                  0.55,
+                  -1.85,
+                  0
+                ],
+                "Color": [
+                  0.2823529411764706,
+                  0.3333333333333333,
+                  0.35294117647058826
+                ],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              },
+              "RightLegEquipmentAnchor": {
+                "$className": "Attachment",
+                "$properties": {
+                  "Position": [
+                    0,
+                    -0.45,
+                    -0.45
+                  ]
+                }
+              }
+            },
+            "LeftFoot": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": false,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Massless": true,
+                "Size": [
+                  0.95,
+                  0.5,
+                  1.2
+                ],
+                "Position": [
+                  -0.55,
+                  -2.75,
+                  -0.12
+                ],
+                "Color": [
+                  0.1843137254901961,
+                  0.2,
+                  0.2235294117647059
+                ],
+                "Material": "Metal",
+                "TopSurface": "Smooth",
+                "BottomSurface": "Smooth"
+              }
+            },
+            "RightFoot": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": false,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Massless": true,
+                "Size": [
+                  0.95,
+                  0.5,
+                  1.2
+                ],
+                "Position": [
+                  0.55,
+                  -2.75,
+                  -0.12
+                ],
+                "Color": [
+                  0.1843137254901961,
+                  0.2,
+                  0.2235294117647059
+                ],
                 "Material": "Metal",
                 "TopSurface": "Smooth",
                 "BottomSurface": "Smooth"
@@ -120,9 +507,11 @@
           },
           "Components": {
             "$className": "Folder",
+            "$ignoreUnknownInstances": false,
             "ClownMask_Prototype": {
               "$className": "Model",
-              "ModuleRoot": {
+              "$ignoreUnknownInstances": false,
+              "HeadEquipmentRoot": {
                 "$className": "Part",
                 "$properties": {
                   "Anchored": false,
@@ -130,46 +519,142 @@
                   "CanQuery": false,
                   "CanTouch": false,
                   "Massless": true,
-                  "Size": [0.25, 0.25, 0.25],
-                  "Position": [0, 0, 0],
-                  "Transparency": 1
+                  "Size": [
+                    0.2,
+                    0.2,
+                    0.2
+                  ],
+                  "Position": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "Color": [
+                    0.9019607843137255,
+                    0.9019607843137255,
+                    0.8431372549019608
+                  ],
+                  "Material": "SmoothPlastic",
+                  "Transparency": 1,
+                  "TopSurface": "Smooth",
+                  "BottomSurface": "Smooth"
                 },
                 "MountAttachment": {
                   "$className": "Attachment"
-                }
-              },
-              "Mask": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [2, 2, 0.7],
-                  "Position": [0, 0.75, 0],
-                  "Color": [0.9019607843137255, 0.9019607843137255, 0.8431372549019608],
-                  "Material": "SmoothPlastic"
-                }
-              },
-              "Nose": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [0.5, 0.5, 0.5],
-                  "Position": [0, 0.7, -0.55],
-                  "Color": [0.9019607843137255, 0.1843137254901961, 0.2],
-                  "Material": "SmoothPlastic"
+                },
+                "Mask": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      1.68,
+                      1.28,
+                      0.22
+                    ],
+                    "Position": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "Color": [
+                      0.9019607843137255,
+                      0.9019607843137255,
+                      0.8431372549019608
+                    ],
+                    "Material": "SmoothPlastic",
+                    "TopSurface": "Smooth",
+                    "BottomSurface": "Smooth"
+                  }
+                },
+                "Nose": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.48,
+                      0.48,
+                      0.38
+                    ],
+                    "Position": [
+                      0,
+                      -0.08,
+                      -0.28
+                    ],
+                    "Shape": "Ball",
+                    "Color": [
+                      0.9019607843137255,
+                      0.1843137254901961,
+                      0.2
+                    ],
+                    "Material": "SmoothPlastic"
+                  }
+                },
+                "LeftCheek": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.3,
+                      0.22,
+                      0.12
+                    ],
+                    "Position": [
+                      -0.5,
+                      -0.28,
+                      -0.17
+                    ],
+                    "Color": [
+                      0.9019607843137255,
+                      0.1843137254901961,
+                      0.2
+                    ],
+                    "Material": "Neon"
+                  }
+                },
+                "RightCheek": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.3,
+                      0.22,
+                      0.12
+                    ],
+                    "Position": [
+                      0.5,
+                      -0.28,
+                      -0.17
+                    ],
+                    "Color": [
+                      0.9019607843137255,
+                      0.1843137254901961,
+                      0.2
+                    ],
+                    "Material": "Neon"
+                  }
                 }
               }
             },
             "SignalScanner_Prototype": {
               "$className": "Model",
-              "ModuleRoot": {
+              "$ignoreUnknownInstances": false,
+              "HeadEquipmentRoot": {
                 "$className": "Part",
                 "$properties": {
                   "Anchored": false,
@@ -177,60 +662,142 @@
                   "CanQuery": false,
                   "CanTouch": false,
                   "Massless": true,
-                  "Size": [0.25, 0.25, 0.25],
-                  "Position": [0, 0, 0],
-                  "Transparency": 1
+                  "Size": [
+                    0.2,
+                    0.2,
+                    0.2
+                  ],
+                  "Position": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "Color": [
+                    0.17647058823529413,
+                    0.5843137254901961,
+                    0.6509803921568628
+                  ],
+                  "Material": "Metal",
+                  "Transparency": 1,
+                  "TopSurface": "Smooth",
+                  "BottomSurface": "Smooth"
                 },
                 "MountAttachment": {
                   "$className": "Attachment"
-                }
-              },
-              "ScannerHead": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [2.2, 1.4, 1.2],
-                  "Position": [0, 0.65, 0],
-                  "Color": [0.17647058823529413, 0.5843137254901961, 0.6509803921568628],
-                  "Material": "Metal"
-                }
-              },
-              "SensorEye": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [0.7, 0.5, 0.25],
-                  "Position": [0, 0.65, -0.72],
-                  "Color": [0.3333333333333333, 0.9607843137254902, 0.6666666666666666],
-                  "Material": "Neon"
-                }
-              },
-              "Antenna": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [0.25, 0.7, 0.25],
-                  "Position": [0, 1.65, 0],
-                  "Color": [0.9294117647058824, 0.7529411764705882, 0.28627450980392155],
-                  "Material": "Metal"
+                },
+                "ScannerHead": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      1.78,
+                      0.62,
+                      0.25
+                    ],
+                    "Position": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "Color": [
+                      0.17647058823529413,
+                      0.5843137254901961,
+                      0.6509803921568628
+                    ],
+                    "Material": "Metal",
+                    "TopSurface": "Smooth",
+                    "BottomSurface": "Smooth"
+                  }
+                },
+                "SensorEye": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.62,
+                      0.32,
+                      0.16
+                    ],
+                    "Position": [
+                      0,
+                      0,
+                      -0.2
+                    ],
+                    "Color": [
+                      0.3333333333333333,
+                      0.9607843137254902,
+                      0.6666666666666666
+                    ],
+                    "Material": "Neon"
+                  }
+                },
+                "AntennaStem": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.18,
+                      0.78,
+                      0.18
+                    ],
+                    "Position": [
+                      0.62,
+                      0.58,
+                      0.05
+                    ],
+                    "Color": [
+                      0.9294117647058824,
+                      0.7529411764705882,
+                      0.28627450980392155
+                    ],
+                    "Material": "Metal"
+                  }
+                },
+                "AntennaBeacon": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.3,
+                      0.3,
+                      0.3
+                    ],
+                    "Position": [
+                      0.62,
+                      0.98,
+                      0.05
+                    ],
+                    "Shape": "Ball",
+                    "Color": [
+                      0.3333333333333333,
+                      0.9607843137254902,
+                      0.6666666666666666
+                    ],
+                    "Material": "Neon"
+                  }
                 }
               }
             },
             "RustClaw_Prototype": {
               "$className": "Model",
-              "ModuleRoot": {
+              "$ignoreUnknownInstances": false,
+              "LeftArmEquipmentRoot": {
                 "$className": "Part",
                 "$properties": {
                   "Anchored": false,
@@ -238,15 +805,81 @@
                   "CanQuery": false,
                   "CanTouch": false,
                   "Massless": true,
-                  "Size": [0.25, 0.25, 0.25],
-                  "Position": [0, 0, 0],
+                  "Size": [
+                    0.2,
+                    0.2,
+                    0.2
+                  ],
+                  "Position": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "Color": [
+                    0.5176470588235295,
+                    0.27450980392156865,
+                    0.1607843137254902
+                  ],
+                  "Material": "CorrodedMetal",
                   "Transparency": 1
                 },
                 "MountAttachment": {
                   "$className": "Attachment"
+                },
+                "ClawCuff": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.92,
+                      1,
+                      0.88
+                    ],
+                    "Position": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "Color": [
+                      0.5176470588235295,
+                      0.27450980392156865,
+                      0.1607843137254902
+                    ],
+                    "Material": "CorrodedMetal"
+                  }
+                },
+                "Claw": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      1.05,
+                      0.45,
+                      1
+                    ],
+                    "Position": [
+                      0,
+                      -0.58,
+                      -0.08
+                    ],
+                    "Color": [
+                      0.6901960784313725,
+                      0.4117647058823529,
+                      0.23137254901960785
+                    ],
+                    "Material": "CorrodedMetal"
+                  }
                 }
               },
-              "LeftArm": {
+              "RightArmEquipmentRoot": {
                 "$className": "Part",
                 "$properties": {
                   "Anchored": false,
@@ -254,58 +887,85 @@
                   "CanQuery": false,
                   "CanTouch": false,
                   "Massless": true,
-                  "Size": [2.2, 0.55, 0.65],
-                  "Position": [-1.35, 0, 0],
-                  "Color": [0.5176470588235295, 0.27450980392156865, 0.1607843137254902],
-                  "Material": "CorrodedMetal"
-                }
-              },
-              "RightArm": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [2.2, 0.55, 0.65],
-                  "Position": [1.35, 0, 0],
-                  "Color": [0.5176470588235295, 0.27450980392156865, 0.1607843137254902],
-                  "Material": "CorrodedMetal"
-                }
-              },
-              "LeftClaw": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [0.55, 1, 0.8],
-                  "Position": [-2.2, 0, -0.1],
-                  "Color": [0.6509803921568628, 0.3843137254901961, 0.2196078431372549],
-                  "Material": "CorrodedMetal"
-                }
-              },
-              "RightClaw": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [0.55, 1, 0.8],
-                  "Position": [2.2, 0, -0.1],
-                  "Color": [0.6509803921568628, 0.3843137254901961, 0.2196078431372549],
-                  "Material": "CorrodedMetal"
+                  "Size": [
+                    0.2,
+                    0.2,
+                    0.2
+                  ],
+                  "Position": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "Color": [
+                    0.5176470588235295,
+                    0.27450980392156865,
+                    0.1607843137254902
+                  ],
+                  "Material": "CorrodedMetal",
+                  "Transparency": 1
+                },
+                "MountAttachment": {
+                  "$className": "Attachment"
+                },
+                "ClawCuff": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.92,
+                      1,
+                      0.88
+                    ],
+                    "Position": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "Color": [
+                      0.5176470588235295,
+                      0.27450980392156865,
+                      0.1607843137254902
+                    ],
+                    "Material": "CorrodedMetal"
+                  }
+                },
+                "Claw": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      1.05,
+                      0.45,
+                      1
+                    ],
+                    "Position": [
+                      0,
+                      -0.58,
+                      -0.08
+                    ],
+                    "Color": [
+                      0.6901960784313725,
+                      0.4117647058823529,
+                      0.23137254901960785
+                    ],
+                    "Material": "CorrodedMetal"
+                  }
                 }
               }
             },
             "ServoArm_Prototype": {
               "$className": "Model",
-              "ModuleRoot": {
+              "$ignoreUnknownInstances": false,
+              "LeftArmEquipmentRoot": {
                 "$className": "Part",
                 "$properties": {
                   "Anchored": false,
@@ -313,15 +973,81 @@
                   "CanQuery": false,
                   "CanTouch": false,
                   "Massless": true,
-                  "Size": [0.25, 0.25, 0.25],
-                  "Position": [0, 0, 0],
+                  "Size": [
+                    0.2,
+                    0.2,
+                    0.2
+                  ],
+                  "Position": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "Color": [
+                    0.25098039215686274,
+                    0.4549019607843137,
+                    0.7019607843137254
+                  ],
+                  "Material": "Metal",
                   "Transparency": 1
                 },
                 "MountAttachment": {
                   "$className": "Attachment"
+                },
+                "ServoCuff": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.94,
+                      1.05,
+                      0.92
+                    ],
+                    "Position": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "Color": [
+                      0.25098039215686274,
+                      0.4549019607843137,
+                      0.7019607843137254
+                    ],
+                    "Material": "Metal"
+                  }
+                },
+                "ServoTool": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.95,
+                      0.48,
+                      1
+                    ],
+                    "Position": [
+                      0,
+                      -0.58,
+                      -0.08
+                    ],
+                    "Color": [
+                      0.9607843137254902,
+                      0.7215686274509804,
+                      0.23137254901960785
+                    ],
+                    "Material": "Metal"
+                  }
                 }
               },
-              "LeftServo": {
+              "RightArmEquipmentRoot": {
                 "$className": "Part",
                 "$properties": {
                   "Anchored": false,
@@ -329,58 +1055,85 @@
                   "CanQuery": false,
                   "CanTouch": false,
                   "Massless": true,
-                  "Size": [2.1, 0.7, 0.8],
-                  "Position": [-1.35, 0, 0],
-                  "Color": [0.25098039215686274, 0.4549019607843137, 0.7019607843137254],
-                  "Material": "Metal"
-                }
-              },
-              "RightServo": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [2.1, 0.7, 0.8],
-                  "Position": [1.35, 0, 0],
-                  "Color": [0.25098039215686274, 0.4549019607843137, 0.7019607843137254],
-                  "Material": "Metal"
-                }
-              },
-              "LeftTool": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [0.45, 0.9, 0.9],
-                  "Position": [-2.2, 0, -0.15],
-                  "Color": [0.9607843137254902, 0.7215686274509804, 0.23137254901960785],
-                  "Material": "Metal"
-                }
-              },
-              "RightTool": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [0.45, 0.9, 0.9],
-                  "Position": [2.2, 0, -0.15],
-                  "Color": [0.9607843137254902, 0.7215686274509804, 0.23137254901960785],
-                  "Material": "Metal"
+                  "Size": [
+                    0.2,
+                    0.2,
+                    0.2
+                  ],
+                  "Position": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "Color": [
+                    0.25098039215686274,
+                    0.4549019607843137,
+                    0.7019607843137254
+                  ],
+                  "Material": "Metal",
+                  "Transparency": 1
+                },
+                "MountAttachment": {
+                  "$className": "Attachment"
+                },
+                "ServoCuff": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.94,
+                      1.05,
+                      0.92
+                    ],
+                    "Position": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "Color": [
+                      0.25098039215686274,
+                      0.4549019607843137,
+                      0.7019607843137254
+                    ],
+                    "Material": "Metal"
+                  }
+                },
+                "ServoTool": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.95,
+                      0.48,
+                      1
+                    ],
+                    "Position": [
+                      0,
+                      -0.58,
+                      -0.08
+                    ],
+                    "Color": [
+                      0.9607843137254902,
+                      0.7215686274509804,
+                      0.23137254901960785
+                    ],
+                    "Material": "Metal"
+                  }
                 }
               }
             },
             "StitchedBoots_Prototype": {
               "$className": "Model",
-              "ModuleRoot": {
+              "$ignoreUnknownInstances": false,
+              "LeftLegEquipmentRoot": {
                 "$className": "Part",
                 "$properties": {
                   "Anchored": false,
@@ -388,15 +1141,81 @@
                   "CanQuery": false,
                   "CanTouch": false,
                   "Massless": true,
-                  "Size": [0.25, 0.25, 0.25],
-                  "Position": [0, 0, 0],
+                  "Size": [
+                    0.2,
+                    0.2,
+                    0.2
+                  ],
+                  "Position": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "Color": [
+                    0.403921568627451,
+                    0.25098039215686274,
+                    0.1843137254901961
+                  ],
+                  "Material": "Fabric",
                   "Transparency": 1
                 },
                 "MountAttachment": {
                   "$className": "Attachment"
+                },
+                "BootUpper": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.94,
+                      0.75,
+                      0.95
+                    ],
+                    "Position": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "Color": [
+                      0.403921568627451,
+                      0.25098039215686274,
+                      0.1843137254901961
+                    ],
+                    "Material": "Fabric"
+                  }
+                },
+                "BootToe": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      1.08,
+                      0.5,
+                      1.35
+                    ],
+                    "Position": [
+                      0,
+                      -0.45,
+                      -0.18
+                    ],
+                    "Color": [
+                      0.19607843137254902,
+                      0.14901960784313725,
+                      0.12941176470588237
+                    ],
+                    "Material": "Fabric"
+                  }
                 }
               },
-              "LeftLeg": {
+              "RightLegEquipmentRoot": {
                 "$className": "Part",
                 "$properties": {
                   "Anchored": false,
@@ -404,58 +1223,85 @@
                   "CanQuery": false,
                   "CanTouch": false,
                   "Massless": true,
-                  "Size": [0.75, 1.4, 0.75],
-                  "Position": [-0.65, -0.7, 0],
-                  "Color": [0.403921568627451, 0.25098039215686274, 0.1843137254901961],
-                  "Material": "Fabric"
-                }
-              },
-              "RightLeg": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [0.75, 1.4, 0.75],
-                  "Position": [0.65, -0.7, 0],
-                  "Color": [0.403921568627451, 0.25098039215686274, 0.1843137254901961],
-                  "Material": "Fabric"
-                }
-              },
-              "LeftBoot": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [1, 0.4, 1.2],
-                  "Position": [-0.65, -1.55, -0.2],
-                  "Color": [0.19607843137254902, 0.14901960784313725, 0.12941176470588237],
-                  "Material": "Fabric"
-                }
-              },
-              "RightBoot": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [1, 0.4, 1.2],
-                  "Position": [0.65, -1.55, -0.2],
-                  "Color": [0.19607843137254902, 0.14901960784313725, 0.12941176470588237],
-                  "Material": "Fabric"
+                  "Size": [
+                    0.2,
+                    0.2,
+                    0.2
+                  ],
+                  "Position": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "Color": [
+                    0.403921568627451,
+                    0.25098039215686274,
+                    0.1843137254901961
+                  ],
+                  "Material": "Fabric",
+                  "Transparency": 1
+                },
+                "MountAttachment": {
+                  "$className": "Attachment"
+                },
+                "BootUpper": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.94,
+                      0.75,
+                      0.95
+                    ],
+                    "Position": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "Color": [
+                      0.403921568627451,
+                      0.25098039215686274,
+                      0.1843137254901961
+                    ],
+                    "Material": "Fabric"
+                  }
+                },
+                "BootToe": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      1.08,
+                      0.5,
+                      1.35
+                    ],
+                    "Position": [
+                      0,
+                      -0.45,
+                      -0.18
+                    ],
+                    "Color": [
+                      0.19607843137254902,
+                      0.14901960784313725,
+                      0.12941176470588237
+                    ],
+                    "Material": "Fabric"
+                  }
                 }
               }
             },
             "SpringLegs_Prototype": {
               "$className": "Model",
-              "ModuleRoot": {
+              "$ignoreUnknownInstances": false,
+              "LeftLegEquipmentRoot": {
                 "$className": "Part",
                 "$properties": {
                   "Anchored": false,
@@ -463,15 +1309,81 @@
                   "CanQuery": false,
                   "CanTouch": false,
                   "Massless": true,
-                  "Size": [0.25, 0.25, 0.25],
-                  "Position": [0, 0, 0],
+                  "Size": [
+                    0.2,
+                    0.2,
+                    0.2
+                  ],
+                  "Position": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "Color": [
+                    0.7019607843137254,
+                    0.7019607843137254,
+                    0.7411764705882353
+                  ],
+                  "Material": "Metal",
                   "Transparency": 1
                 },
                 "MountAttachment": {
                   "$className": "Attachment"
+                },
+                "SpringHousing": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.78,
+                      0.85,
+                      0.78
+                    ],
+                    "Position": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "Color": [
+                      0.7019607843137254,
+                      0.7019607843137254,
+                      0.7411764705882353
+                    ],
+                    "Material": "Metal"
+                  }
+                },
+                "Runner": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      1,
+                      0.5,
+                      1.25
+                    ],
+                    "Position": [
+                      0,
+                      -0.45,
+                      -0.12
+                    ],
+                    "Color": [
+                      0.3607843137254902,
+                      0.8235294117647058,
+                      0.5529411764705883
+                    ],
+                    "Material": "Metal"
+                  }
                 }
               },
-              "LeftSpring": {
+              "RightLegEquipmentRoot": {
                 "$className": "Part",
                 "$properties": {
                   "Anchored": false,
@@ -479,52 +1391,78 @@
                   "CanQuery": false,
                   "CanTouch": false,
                   "Massless": true,
-                  "Size": [0.45, 1.5, 0.45],
-                  "Position": [-0.65, -0.75, 0],
-                  "Color": [0.7019607843137254, 0.7019607843137254, 0.7411764705882353],
-                  "Material": "Metal"
-                }
-              },
-              "RightSpring": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [0.45, 1.5, 0.45],
-                  "Position": [0.65, -0.75, 0],
-                  "Color": [0.7019607843137254, 0.7019607843137254, 0.7411764705882353],
-                  "Material": "Metal"
-                }
-              },
-              "LeftFoot": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [1, 0.4, 1.1],
-                  "Position": [-0.65, -1.55, -0.15],
-                  "Color": [0.3607843137254902, 0.8235294117647058, 0.5529411764705883],
-                  "Material": "Metal"
-                }
-              },
-              "RightFoot": {
-                "$className": "Part",
-                "$properties": {
-                  "Anchored": false,
-                  "CanCollide": false,
-                  "CanQuery": false,
-                  "CanTouch": false,
-                  "Massless": true,
-                  "Size": [1, 0.4, 1.1],
-                  "Position": [0.65, -1.55, -0.15],
-                  "Color": [0.3607843137254902, 0.8235294117647058, 0.5529411764705883],
-                  "Material": "Metal"
+                  "Size": [
+                    0.2,
+                    0.2,
+                    0.2
+                  ],
+                  "Position": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "Color": [
+                    0.7019607843137254,
+                    0.7019607843137254,
+                    0.7411764705882353
+                  ],
+                  "Material": "Metal",
+                  "Transparency": 1
+                },
+                "MountAttachment": {
+                  "$className": "Attachment"
+                },
+                "SpringHousing": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      0.78,
+                      0.85,
+                      0.78
+                    ],
+                    "Position": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "Color": [
+                      0.7019607843137254,
+                      0.7019607843137254,
+                      0.7411764705882353
+                    ],
+                    "Material": "Metal"
+                  }
+                },
+                "Runner": {
+                  "$className": "Part",
+                  "$properties": {
+                    "Anchored": false,
+                    "CanCollide": false,
+                    "CanQuery": false,
+                    "CanTouch": false,
+                    "Massless": true,
+                    "Size": [
+                      1,
+                      0.5,
+                      1.25
+                    ],
+                    "Position": [
+                      0,
+                      -0.45,
+                      -0.12
+                    ],
+                    "Color": [
+                      0.3607843137254902,
+                      0.8235294117647058,
+                      0.5529411764705883
+                    ],
+                    "Material": "Metal"
+                  }
                 }
               }
             }
