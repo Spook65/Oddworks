@@ -154,6 +154,13 @@ end
 
 local SignatureDiscoveryService = require(signatureDiscoveryServiceModule)
 
+local furnacePodChaseServiceModule = Services:WaitForChild("FurnacePodChaseService")
+if not furnacePodChaseServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.FurnacePodChaseService must be a ModuleScript.")
+end
+
+local FurnacePodChaseService = require(furnacePodChaseServiceModule)
+
 local devHarnessServiceModule = Services:WaitForChild("DevHarnessService")
 if not devHarnessServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.DevHarnessService must be a ModuleScript.")
@@ -208,6 +215,7 @@ WorkshopBankingService.Start()
 PrototypeAssemblyService.Start()
 PrototypeConstructRuntimeService.Start()
 SignatureDiscoveryService.Start()
+FurnacePodChaseService.Start()
 SalvageService.Start()
 OuterYardSalvageService.Start()
 DeepBayService.Start()

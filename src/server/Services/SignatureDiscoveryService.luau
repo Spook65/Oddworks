@@ -15,6 +15,7 @@ local WorkshopService = require(Services:WaitForChild("WorkshopService"))
 local SignatureDiscoveryConfig = require(Config:WaitForChild("SignatureDiscoveryConfig"))
 
 type Definition = SignatureDiscoveryConfig.SignatureDiscoveryDefinition
+type DiscoverySource = "SIGNAL" | "FURNACE_POD"
 type OpportunityRuntime = {
 	Model: Model,
 	InteractionPart: BasePart,
@@ -31,6 +32,7 @@ local PLAYER_CONTAINER_PREFIX = "Player_"
 local STATE_REQUEST_INTERVAL_SECONDS = 1
 
 local discoveries: { [Player]: boolean } = {}
+local discoverySources: { [Player]: DiscoverySource } = {}
 local lastAttemptTimes: { [Player]: number } = {}
 local lastStateRequestTimes: { [Player]: number } = {}
 local pendingReconciliations: { [Player]: boolean } = {}
@@ -109,9 +111,21 @@ local function validateDefinition(candidate: Definition)
 		or not isPositiveFinite(candidate.AuditIntervalSeconds)
 		or candidate.RevealMarkerNamesByPlot.Plot01 == nil
 		or candidate.RevealMarkerNamesByPlot.Plot02 == nil
+		or #candidate.WorkshopRevealMarkerName == 0
 	then
 		error("[ODDWORKS][SignatureDiscovery] Signature discovery configuration is invalid.")
 	end
+end
+
+local function getRevealMarker(player: Player, opportunity: OpportunityRuntime, candidate: Definition): BasePart?
+	if discoverySources[player] == "FURNACE_POD" then
+		local plot = WorkshopService.GetAssignedPlot(player)
+		local marker = if plot then plot:FindFirstChild(candidate.WorkshopRevealMarkerName) else nil
+		return if marker and marker:IsA("BasePart") then marker else nil
+	end
+
+	local plotId = WorkshopService.GetAssignedPlotId(player)
+	return if plotId then opportunity.RevealMarkersByPlot[plotId] else nil
 end
 
 local function discoverOpportunity(candidate: Definition): OpportunityRuntime
@@ -279,8 +293,7 @@ function SignatureDiscoveryService.Reconcile(player: Player): boolean
 		return true
 	end
 
-	local plotId = WorkshopService.GetAssignedPlotId(player)
-	local marker = if plotId then opportunity.RevealMarkersByPlot[plotId] else nil
+	local marker = getRevealMarker(player, opportunity, candidate)
 	local template = getTemplate(candidate)
 	if not marker or not template then
 		destroyRuntime(player)
@@ -365,9 +378,33 @@ local function handlePromptTriggered(player: Player)
 	-- This no-yield assignment is the complete session discovery transaction.
 	-- Physical construction happens afterward and cannot revoke or duplicate it.
 	discoveries[player] = true
+	discoverySources[player] = "SIGNAL"
 	sendState(player, "REVEALED")
 	queueReconcile(player)
 	print(string.format("[ODDWORKS][SignatureDiscovery] %s discovered Kilnback for this session.", player.Name))
+end
+
+-- This server-only entry point lets another validated server gameplay flow use
+-- the existing session discovery and derived Kilnback runtime. It deliberately
+-- does not relax the SignalScanner requirement on the public world prompt.
+function SignatureDiscoveryService.RevealKilnbackFromFurnacePod(player: Player): boolean
+	if not started
+		or player.Parent ~= Players
+		or not PlayerStateService.HasState(player)
+		or not ModularPrototypeStateService.HasState(player)
+		or not WorkshopService.GetAssignedPlot(player)
+	then
+		return false
+	end
+
+	discoveries[player] = true
+	discoverySources[player] = "FURNACE_POD"
+	-- The chase controller owns the reveal banner. STATE updates the existing
+	-- scanner presentation without firing its separate discovery celebration.
+	sendState(player, "STATE")
+	queueReconcile(player)
+	print(string.format("[ODDWORKS][SignatureDiscovery] %s revealed Kilnback from a secured Furnace Pod.", player.Name))
+	return true
 end
 
 local function handleStateRequest(player: Player, ...: any)
@@ -388,6 +425,7 @@ end
 
 local function cleanupPlayer(player: Player)
 	discoveries[player] = nil
+	discoverySources[player] = nil
 	lastAttemptTimes[player] = nil
 	lastStateRequestTimes[player] = nil
 	pendingReconciliations[player] = nil

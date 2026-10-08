@@ -46,6 +46,12 @@
         },
         "SignatureDiscoveryState": {
           "$className": "RemoteEvent"
+        },
+        "FurnacePodChaseState": {
+          "$className": "RemoteEvent"
+        },
+        "FurnacePodStealConfirm": {
+          "$className": "RemoteEvent"
         }
       },
       "Shared": {
@@ -1730,6 +1736,106 @@
             "BottomSurface": "Smooth"
           }
         },
+        "FurnacePodTarget": {
+          "$className": "Model",
+          "PodShell": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [4.2, 5.2, 4.2],
+              "Position": [0, 2.8, 52],
+              "Shape": "Ball",
+              "Color": [0.28627450980392155, 0.30196078431372547, 0.3058823529411765],
+              "Material": "CorrodedMetal",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            },
+            "Prompt": {
+              "$className": "ProximityPrompt",
+              "$properties": {
+                "ActionText": "STEAL FURNACE POD",
+                "ObjectText": "Unstable Furnace Pod",
+                "HoldDuration": 0,
+                "MaxActivationDistance": 8,
+                "RequiresLineOfSight": false
+              }
+            }
+          },
+          "FurnaceCore": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CanQuery": false,
+              "CanTouch": false,
+              "Size": [2.2, 2.8, 0.45],
+              "Position": [0, 2.75, 49.9],
+              "Color": [1, 0.3568627450980392, 0.08627450980392157],
+              "Material": "Neon",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            }
+          },
+          "TopCap": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CanQuery": false,
+              "CanTouch": false,
+              "Size": [3.1, 0.55, 3.1],
+              "Position": [0, 5.25, 52],
+              "Color": [0.8784313725490196, 0.6431372549019608, 0.2196078431372549],
+              "Material": "Metal",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            }
+          },
+          "BottomCap": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CanQuery": false,
+              "CanTouch": false,
+              "Size": [3.1, 0.55, 3.1],
+              "Position": [0, 0.35, 52],
+              "Color": [0.8784313725490196, 0.6431372549019608, 0.2196078431372549],
+              "Material": "Metal",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            }
+          },
+          "AlarmBeacon": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CanQuery": false,
+              "CanTouch": false,
+              "Size": [0.85, 0.85, 0.85],
+              "Position": [0, 5.85, 52],
+              "Shape": "Ball",
+              "Color": [1, 0.20784313725490197, 0.1411764705882353],
+              "Material": "Neon"
+            }
+          },
+          "WardenSpawnMarker": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CanQuery": false,
+              "CanTouch": false,
+              "Size": [0.2, 0.2, 0.2],
+              "Position": [12, 0.5, 52],
+              "Transparency": 1
+            }
+          }
+        },
         "HiddenSignalOpportunity": {
           "$className": "Model",
           "WreckHull": {
@@ -1929,6 +2035,30 @@
                 "Transparency": 1
               }
             },
+            "FurnacePodSecureZone": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Size": [10, 8, 10],
+                "Position": [-22, 4, 0],
+                "Transparency": 1
+              }
+            },
+            "KilnbackChaseRevealMarker": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Size": [0.2, 0.2, 0.2],
+                "Position": [-31, 0.45, 0],
+                "Transparency": 1
+              }
+            },
             "WorkshopUpgradeStation": {
               "$className": "Part",
               "$properties": {
@@ -2098,6 +2228,30 @@
                 "CanTouch": false,
                 "Size": [0.2, 0.2, 0.2],
                 "Position": [22, 0.45, 0],
+                "Transparency": 1
+              }
+            },
+            "FurnacePodSecureZone": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Size": [10, 8, 10],
+                "Position": [22, 4, 0],
+                "Transparency": 1
+              }
+            },
+            "KilnbackChaseRevealMarker": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": false,
+                "CanQuery": false,
+                "CanTouch": false,
+                "Size": [0.2, 0.2, 0.2],
+                "Position": [31, 0.45, 0],
                 "Transparency": 1
               }
             },
