@@ -114,10 +114,10 @@ local function createPresentation(cueAnchor: BasePart, investigationPrompt: Prox
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "LocalStrangeSignalCue"
 	billboard.Adornee = cueAnchor
-	billboard.AlwaysOnTop = true
+	billboard.AlwaysOnTop = false
 	billboard.Enabled = false
-	billboard.MaxDistance = 120
-	billboard.Size = UDim2.fromOffset(260, 82)
+	billboard.MaxDistance = 85
+	billboard.Size = UDim2.fromOffset(190, 54)
 	billboard.StudsOffset = Vector3.new(0, 1.3, 0)
 	billboard.Parent = cueAnchor
 	cueGui = billboard
@@ -131,7 +131,8 @@ local function createPresentation(cueAnchor: BasePart, investigationPrompt: Prox
 	label.Font = Enum.Font.GothamBold
 	label.Text = "STRANGE SIGNAL\nSCANNER LOCK"
 	label.TextColor3 = Color3.fromRGB(103, 255, 188)
-	label.TextScaled = true
+	label.TextSize = 14
+	label.TextWrapped = true
 	label.Parent = billboard
 
 	local stroke = Instance.new("UIStroke")

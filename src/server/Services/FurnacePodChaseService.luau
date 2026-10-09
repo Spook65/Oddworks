@@ -719,7 +719,11 @@ local function clearPlayer(player: Player)
 	lastAttemptTimes[player] = nil
 	lastConfirmationTimes[player] = nil
 	if carrier == player then
+		local shouldNotifyClient = player.Parent == Players
 		failAttempt(player, generation, false, false)
+		if shouldNotifyClient then
+			fireCarrier(player, { Kind = "CANCELLED" })
+		end
 	else
 		restoreChaseMovement(player)
 	end
@@ -736,7 +740,14 @@ local function handleModularStateChanged(player: Player)
 	restoreChaseMovement(player)
 end
 
-local function createLandmarkLabel(part: BasePart, name: string, text: string, color: Color3)
+local function createLandmarkLabel(
+	part: BasePart,
+	name: string,
+	text: string,
+	color: Color3,
+	maxDistance: number,
+	size: Vector2
+)
 	local previous = part:FindFirstChild(name)
 	if previous then
 		previous:Destroy()
@@ -744,9 +755,9 @@ local function createLandmarkLabel(part: BasePart, name: string, text: string, c
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = name
 	billboard.Adornee = part
-	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 500
-	billboard.Size = UDim2.fromOffset(280, 72)
+	billboard.AlwaysOnTop = false
+	billboard.MaxDistance = maxDistance
+	billboard.Size = UDim2.fromOffset(size.X, size.Y)
 	billboard.Parent = part
 
 	local label = Instance.new("TextLabel")
@@ -758,8 +769,52 @@ local function createLandmarkLabel(part: BasePart, name: string, text: string, c
 	label.Font = Enum.Font.GothamBold
 	label.Text = text
 	label.TextColor3 = color
-	label.TextScaled = true
+	label.TextSize = 15
+	label.TextWrapped = true
 	label.Parent = billboard
+end
+
+local function addSignFace(sign: BasePart, face: Enum.NormalId, text: string)
+	local surface = Instance.new("SurfaceGui")
+	surface.Name = face.Name .. "Face"
+	surface.Face = face
+	surface.LightInfluence = 0.2
+	surface.PixelsPerStud = 40
+	surface.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	surface.Parent = sign
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBold
+	label.Text = text
+	label.TextColor3 = Color3.fromRGB(245, 247, 237)
+	label.TextScaled = true
+	label.Parent = surface
+end
+
+local function createRouteSign(routeModel: Model, marker: BasePart, name: string, text: string, color: Color3)
+	local previous = routeModel:FindFirstChild(name)
+	if previous then
+		previous:Destroy()
+	end
+
+	local sign = Instance.new("Part")
+	sign.Name = name
+	sign.Anchored = true
+	sign.CanCollide = false
+	sign.CanQuery = false
+	sign.CanTouch = false
+	sign.Size = Vector3.new(8, 3, 0.35)
+	sign.Position = Vector3.new(marker.Position.X, 2.5, marker.Position.Z)
+	sign.Color = color
+	sign.Material = Enum.Material.Metal
+	sign.TopSurface = Enum.SurfaceType.Smooth
+	sign.BottomSurface = Enum.SurfaceType.Smooth
+	sign.Parent = routeModel
+	addSignFace(sign, Enum.NormalId.Front, text)
+	addSignFace(sign, Enum.NormalId.Back, text)
 end
 
 local function discoverRuntime(candidate: Definition): ChaseRuntime
@@ -769,10 +824,38 @@ local function discoverRuntime(candidate: Definition): ChaseRuntime
 	local safeRouteMarker = requireChildOfClass(routeModel, candidate.SafeRouteMarkerName, "BasePart") :: BasePart
 	local shortcutMarker = requireChildOfClass(routeModel, candidate.ShortcutMarkerName, "BasePart") :: BasePart
 	local furnaceSiteMarker = requireChildOfClass(routeModel, candidate.FurnaceSiteMarkerName, "BasePart") :: BasePart
-	createLandmarkLabel(workshopMarker, "WorkshopAreaLabel", "WORKSHOPS\nSAFETY", Color3.fromRGB(92, 238, 157))
-	createLandmarkLabel(safeRouteMarker, "SafeRouteLabel", "LONG / OPEN\nWIDE GREEN ROUTE", Color3.fromRGB(92, 238, 157))
-	createLandmarkLabel(shortcutMarker, "ShortcutLabel", "SHORT / TECHNICAL\nJUMP BARRIERS", Color3.fromRGB(255, 177, 65))
-	createLandmarkLabel(furnaceSiteMarker, "FurnaceSiteLabel", "FURNACE SITE", Color3.fromRGB(255, 103, 52))
+	local retiredSafeLabel = safeRouteMarker:FindFirstChild("SafeRouteLabel")
+	if retiredSafeLabel then
+		retiredSafeLabel:Destroy()
+	end
+	local retiredShortcutLabel = shortcutMarker:FindFirstChild("ShortcutLabel")
+	if retiredShortcutLabel then
+		retiredShortcutLabel:Destroy()
+	end
+	createLandmarkLabel(
+		workshopMarker,
+		"WorkshopAreaLabel",
+		"WORKSHOPS",
+		Color3.fromRGB(92, 238, 157),
+		85,
+		Vector2.new(140, 36)
+	)
+	createRouteSign(routeModel, safeRouteMarker, "LongOpenRouteSign", "GREEN\nLONG / OPEN", Color3.fromRGB(46, 126, 84))
+	createRouteSign(
+		routeModel,
+		shortcutMarker,
+		"ShortTechnicalRouteSign",
+		"ORANGE\nSHORT / TECHNICAL",
+		Color3.fromRGB(176, 89, 35)
+	)
+	createLandmarkLabel(
+		furnaceSiteMarker,
+		"FurnaceSiteLabel",
+		"FURNACE SITE",
+		Color3.fromRGB(255, 132, 76),
+		120,
+		Vector2.new(150, 38)
+	)
 	local targetModel = requireChildOfClass(world, candidate.WorldModelName, "Model") :: Model
 	local interactionPart = requireChildOfClass(targetModel, candidate.InteractionPartName, "BasePart") :: BasePart
 	local prompt = requireChildOfClass(interactionPart, "Prompt", "ProximityPrompt") :: ProximityPrompt

@@ -87,9 +87,9 @@ local function createBillboard(part: BasePart, name: string, initialText: string
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = name
 	billboard.Adornee = part
-	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 110
-	billboard.Size = UDim2.fromOffset(260, 64)
+	billboard.AlwaysOnTop = false
+	billboard.MaxDistance = 70
+	billboard.Size = UDim2.fromOffset(180, 48)
 	billboard.StudsOffset = Vector3.new(0, 1.6, 0)
 	billboard.Parent = part
 
@@ -102,7 +102,8 @@ local function createBillboard(part: BasePart, name: string, initialText: string
 	label.Size = UDim2.fromScale(1, 1)
 	label.Text = initialText
 	label.TextColor3 = Color3.fromRGB(245, 245, 235)
-	label.TextScaled = true
+	label.TextSize = 14
+	label.TextWrapped = true
 	label.Parent = billboard
 	return label
 end

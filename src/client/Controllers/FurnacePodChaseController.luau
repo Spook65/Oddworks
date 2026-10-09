@@ -2,6 +2,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
@@ -13,8 +14,13 @@ local dangerOverlay: Frame? = nil
 local explanationBackdrop: Frame? = nil
 local confirmationRemote: RemoteEvent? = nil
 local objectiveTarget: Part? = nil
-local objectiveOrigin: Attachment? = nil
-local objectiveBeam: Beam? = nil
+local objectiveBillboard: BillboardGui? = nil
+local objectiveLabel: TextLabel? = nil
+local objectiveEdge: Frame? = nil
+local objectiveEdgeArrow: TextLabel? = nil
+local objectiveEdgeText: TextLabel? = nil
+local objectiveConnection: RBXScriptConnection? = nil
+local objectiveDestination: Vector3? = nil
 local presentationToken = 0
 local abilityPresentationToken = 0
 local started = false
@@ -94,6 +100,45 @@ local function createPresentation()
 	abilitySizeConstraint.MinSize = Vector2.new(280, 58)
 	abilitySizeConstraint.Parent = abilityLabel
 	abilityToast = abilityLabel
+
+	local edge = Instance.new("Frame")
+	edge.Name = "WorkshopEdgeObjective"
+	edge.AnchorPoint = Vector2.new(0.5, 0.5)
+	edge.Size = UDim2.fromOffset(210, 38)
+	edge.BackgroundColor3 = Color3.fromRGB(24, 39, 32)
+	edge.BackgroundTransparency = 0.08
+	edge.BorderSizePixel = 0
+	edge.Visible = false
+	edge.ZIndex = 14
+	edge.Parent = screenGui
+	objectiveEdge = edge
+
+	local edgeArrow = Instance.new("TextLabel")
+	edgeArrow.Name = "Direction"
+	edgeArrow.Position = UDim2.fromOffset(5, 4)
+	edgeArrow.Size = UDim2.fromOffset(30, 30)
+	edgeArrow.BackgroundTransparency = 1
+	edgeArrow.Font = Enum.Font.GothamBlack
+	edgeArrow.Text = ">"
+	edgeArrow.TextColor3 = Color3.fromRGB(111, 255, 173)
+	edgeArrow.TextSize = 24
+	edgeArrow.ZIndex = 15
+	edgeArrow.Parent = edge
+	objectiveEdgeArrow = edgeArrow
+
+	local edgeText = Instance.new("TextLabel")
+	edgeText.Name = "Objective"
+	edgeText.Position = UDim2.fromOffset(39, 0)
+	edgeText.Size = UDim2.new(1, -45, 1, 0)
+	edgeText.BackgroundTransparency = 1
+	edgeText.Font = Enum.Font.GothamBold
+	edgeText.Text = "RETURN TO WORKSHOP"
+	edgeText.TextColor3 = Color3.fromRGB(225, 255, 235)
+	edgeText.TextSize = 13
+	edgeText.TextXAlignment = Enum.TextXAlignment.Left
+	edgeText.ZIndex = 15
+	edgeText.Parent = edge
+	objectiveEdgeText = edgeText
 
 	local backdrop = Instance.new("Frame")
 	backdrop.Name = "FirstTheftExplanation"
@@ -234,27 +279,91 @@ local function hideSpringLegsActive()
 end
 
 local function clearObjectiveCue()
-	if objectiveBeam then
-		objectiveBeam:Destroy()
-		objectiveBeam = nil
-	end
-	if objectiveOrigin then
-		objectiveOrigin:Destroy()
-		objectiveOrigin = nil
+	if objectiveConnection then
+		objectiveConnection:Disconnect()
+		objectiveConnection = nil
 	end
 	if objectiveTarget then
 		objectiveTarget:Destroy()
 		objectiveTarget = nil
 	end
+	objectiveBillboard = nil
+	objectiveLabel = nil
+	objectiveDestination = nil
+	if objectiveEdge then
+		objectiveEdge.Visible = false
+	end
+end
+
+local function updateObjectiveCue()
+	local destination = objectiveDestination
+	local edge = objectiveEdge
+	local edgeArrow = objectiveEdgeArrow
+	local edgeText = objectiveEdgeText
+	local camera = Workspace.CurrentCamera
+	local character = Players.LocalPlayer.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	if not destination or not edge or not edgeArrow or not edgeText or not camera or not root or not root:IsA("BasePart") then
+		if edge then
+			edge.Visible = false
+		end
+		return
+	end
+
+	local distance = (root.Position - destination).Magnitude
+	if objectiveLabel then
+		objectiveLabel.Text = string.format("RETURN TO WORKSHOP\n%dm", math.floor(distance + 0.5))
+	end
+	if objectiveBillboard then
+		objectiveBillboard.Enabled = distance > 10
+	end
+
+	local viewportPoint, onScreen = camera:WorldToViewportPoint(destination)
+	local viewportSize = camera.ViewportSize
+	local comfortableOnScreen = onScreen
+		and viewportPoint.Z > 0
+		and viewportPoint.X >= 90
+		and viewportPoint.X <= viewportSize.X - 90
+		and viewportPoint.Y >= 100
+		and viewportPoint.Y <= viewportSize.Y - 70
+	if comfortableOnScreen then
+		edge.Visible = false
+		return
+	end
+
+	local center = viewportSize * 0.5
+	local screenDirection = Vector2.new(viewportPoint.X, viewportPoint.Y) - center
+	if viewportPoint.Z <= 0 then
+		screenDirection = -screenDirection
+	end
+	if screenDirection.Magnitude < 0.001 then
+		local cameraDirection = camera.CFrame:VectorToObjectSpace(destination - camera.CFrame.Position)
+		screenDirection = Vector2.new(cameraDirection.X, -cameraDirection.Y)
+	end
+	if screenDirection.Magnitude < 0.001 then
+		screenDirection = Vector2.new(1, 0)
+	end
+
+	local unitDirection = screenDirection.Unit
+	local horizontalRadius = math.max(center.X - 125, 1)
+	local verticalRadius = math.max(center.Y - 115, 1)
+	local edgeScale = math.min(
+		horizontalRadius / math.max(math.abs(unitDirection.X), 0.001),
+		verticalRadius / math.max(math.abs(unitDirection.Y), 0.001)
+	)
+	local edgePosition = center + unitDirection * edgeScale
+	edgePosition = Vector2.new(
+		math.clamp(edgePosition.X, 112, viewportSize.X - 112),
+		math.clamp(edgePosition.Y, 105, viewportSize.Y - 52)
+	)
+	edge.Position = UDim2.fromOffset(edgePosition.X, edgePosition.Y)
+	edgeArrow.Rotation = math.deg(math.atan2(unitDirection.Y, unitDirection.X))
+	edgeText.Text = string.format("RETURN TO WORKSHOP\n%dm", math.floor(distance + 0.5))
+	edge.Visible = true
 end
 
 local function showObjectiveCue(destination: Vector3)
 	clearObjectiveCue()
-	local character = Players.LocalPlayer.Character
-	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	if not root or not root:IsA("BasePart") then
-		return
-	end
 
 	local target = Instance.new("Part")
 	target.Name = "LocalWorkshopObjective"
@@ -264,49 +373,34 @@ local function showObjectiveCue(destination: Vector3)
 	target.CanTouch = false
 	target.Size = Vector3.new(0.2, 0.2, 0.2)
 	target.Transparency = 1
-	target.Position = destination + Vector3.new(0, 3.5, 0)
+	target.Position = destination + Vector3.new(0, 2.8, 0)
 	target.Parent = Workspace
 	objectiveTarget = target
-
-	local destinationAttachment = Instance.new("Attachment")
-	destinationAttachment.Name = "Destination"
-	destinationAttachment.Parent = target
-	local origin = Instance.new("Attachment")
-	origin.Name = "WorkshopObjectiveOrigin"
-	origin.Parent = root
-	objectiveOrigin = origin
-
-	local beam = Instance.new("Beam")
-	beam.Name = "WorkshopObjectiveBeam"
-	beam.Attachment0 = origin
-	beam.Attachment1 = destinationAttachment
-	beam.Color = ColorSequence.new(Color3.fromRGB(82, 241, 151))
-	beam.FaceCamera = true
-	beam.LightEmission = 0.8
-	beam.Transparency = NumberSequence.new(0.18)
-	beam.Width0 = 0.12
-	beam.Width1 = 0.7
-	beam.Parent = origin
-	objectiveBeam = beam
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "WorkshopObjectiveLabel"
 	billboard.Adornee = target
 	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 180
-	billboard.Size = UDim2.fromOffset(260, 72)
+	billboard.MaxDistance = 140
+	billboard.Size = UDim2.fromOffset(170, 48)
 	billboard.Parent = target
+	objectiveBillboard = billboard
 
-	local objectiveLabel = Instance.new("TextLabel")
-	objectiveLabel.Size = UDim2.fromScale(1, 1)
-	objectiveLabel.BackgroundColor3 = Color3.fromRGB(25, 43, 34)
-	objectiveLabel.BackgroundTransparency = 0.12
-	objectiveLabel.BorderSizePixel = 0
-	objectiveLabel.Font = Enum.Font.GothamBold
-	objectiveLabel.Text = "YOUR WORKSHOP\nBRING THE POD HERE"
-	objectiveLabel.TextColor3 = Color3.fromRGB(111, 255, 173)
-	objectiveLabel.TextScaled = true
-	objectiveLabel.Parent = billboard
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundColor3 = Color3.fromRGB(25, 43, 34)
+	label.BackgroundTransparency = 0.12
+	label.BorderSizePixel = 0
+	label.Font = Enum.Font.GothamBold
+	label.Text = "RETURN TO WORKSHOP"
+	label.TextColor3 = Color3.fromRGB(111, 255, 173)
+	label.TextSize = 14
+	label.TextWrapped = true
+	label.Parent = billboard
+	objectiveLabel = label
+	objectiveDestination = destination
+	objectiveConnection = RunService.RenderStepped:Connect(updateObjectiveCue)
+	updateObjectiveCue()
 end
 
 local function showMessage(text: string, color: Color3, duration: number, keepDanger: boolean)
@@ -344,6 +438,18 @@ local function showMessage(text: string, color: Color3, duration: number, keepDa
 			end
 		end)
 	end)
+end
+
+local function clearChasePresentation()
+	presentationToken += 1
+	if banner then
+		banner.Visible = false
+	end
+	if dangerOverlay then
+		dangerOverlay.Visible = false
+	end
+	hideSpringLegsActive()
+	clearObjectiveCue()
 end
 
 local function isFiniteVector3(value: any): boolean
@@ -407,7 +513,7 @@ local function readPayload(payload: any): (string?, number?, string?, number?, V
 			end
 		end
 		return kind, nil, payload.SignatureId, nil, nil, nil
-	elseif kind == "CAUGHT" or kind == "SECURED" then
+	elseif kind == "CAUGHT" or kind == "SECURED" or kind == "CANCELLED" then
 		for key in pairs(payload) do
 			if key ~= "Kind" then
 				return nil, nil, nil, nil, nil, nil
@@ -428,6 +534,9 @@ function FurnacePodChaseController.Start()
 	local network = requireChildOfClass(ReplicatedStorage, "ODDWORKSNetwork", "Folder")
 	local stateRemote = requireChildOfClass(network, "FurnacePodChaseState", "RemoteEvent") :: RemoteEvent
 	confirmationRemote = requireChildOfClass(network, "FurnacePodStealConfirm", "RemoteEvent") :: RemoteEvent
+	Players.LocalPlayer.CharacterRemoving:Connect(function()
+		clearChasePresentation()
+	end)
 	stateRemote.OnClientEvent:Connect(function(payload: any)
 		local kind, stage, _, headStartSeconds, destinationPosition, springLegsActive = readPayload(payload)
 		if not kind then
@@ -476,6 +585,8 @@ function FurnacePodChaseController.Start()
 			hideSpringLegsActive()
 			clearObjectiveCue()
 			showMessage("ODDITY REVEALED\nKILNBACK", Color3.fromRGB(255, 174, 48), 4, false)
+		elseif kind == "CANCELLED" then
+			clearChasePresentation()
 		end
 	end)
 end
