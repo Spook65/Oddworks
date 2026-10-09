@@ -45,6 +45,9 @@ local RARITY_ORDER: { [string]: number } = {
 	Rare = 2,
 	Legendary = 3,
 }
+local COMPONENT_DESCRIPTIONS: { [string]: string } = {
+	SpringLegs = "Chase mobility boost",
+}
 
 local latestSnapshot: ModularSnapshot? = nil
 local optionsBySlot: { [string]: { AvailableSelection } } = {}
@@ -211,7 +214,9 @@ local function formatOption(option: AvailableSelection): string
 	if option.IsInstalled then
 		availability = if option.BankedCount > 0 then availability .. " + installed" else "installed"
 	end
-	return string.format("%s [%s] - %s", option.DisplayName, option.Rarity, availability)
+	local summary = string.format("%s [%s] - %s", option.DisplayName, option.Rarity, availability)
+	local description = COMPONENT_DESCRIPTIONS[option.ComponentId]
+	return if description then summary .. "\n" .. description else summary
 end
 
 local function getSelectedOption(slot: string): AvailableSelection?

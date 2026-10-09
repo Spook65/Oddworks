@@ -168,6 +168,13 @@ end
 
 local DevHarnessService = require(devHarnessServiceModule)
 
+local devInspectorServiceModule = Services:WaitForChild("DevInspectorService")
+if not devInspectorServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.DevInspectorService must be a ModuleScript.")
+end
+
+local DevInspectorService = require(devInspectorServiceModule)
+
 -- The server verifies that the persistent world exists instead of creating it
 -- here so Studio/Rojo remain the source of truth for this static bootstrap map.
 local function requireChildOfClass(parent: Instance, childName: string, expectedClassName: string): Instance
@@ -224,8 +231,9 @@ CraftingService.Start()
 -- Persistence starts after every state consumer has registered its listeners.
 -- PlayerState remains absent until a profile session has loaded successfully.
 PersistenceService.Start()
--- Developer tooling starts last so its commands can call fully initialized
--- production APIs. Its own server-side gate keeps it inert outside Studio.
+-- Developer tooling starts after production APIs are initialized. Each tool
+-- independently gates its presentation and server actions to Studio.
 DevHarnessService.Start()
+DevInspectorService.Start()
 
 print(string.format("[%s][Server] Production bootstrap ready (v%s)", GameConstants.PROJECT_NAME, GameConstants.VERTICAL_SLICE_VERSION))

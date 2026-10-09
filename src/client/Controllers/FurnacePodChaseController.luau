@@ -8,6 +8,7 @@ local Workspace = game:GetService("Workspace")
 local FurnacePodChaseController = {}
 
 local banner: TextLabel? = nil
+local abilityToast: TextLabel? = nil
 local dangerOverlay: Frame? = nil
 local explanationBackdrop: Frame? = nil
 local confirmationRemote: RemoteEvent? = nil
@@ -15,6 +16,7 @@ local objectiveTarget: Part? = nil
 local objectiveOrigin: Attachment? = nil
 local objectiveBeam: Beam? = nil
 local presentationToken = 0
+local abilityPresentationToken = 0
 local started = false
 
 local function requireChildOfClass(parent: Instance, childName: string, expectedClassName: string): Instance
@@ -71,6 +73,27 @@ local function createPresentation()
 	sizeConstraint.MinSize = Vector2.new(300, 96)
 	sizeConstraint.Parent = label
 	banner = label
+
+	local abilityLabel = Instance.new("TextLabel")
+	abilityLabel.Name = "SpringLegsToast"
+	abilityLabel.AnchorPoint = Vector2.new(0.5, 0)
+	abilityLabel.Position = UDim2.new(0.5, 0, 0.07, 104)
+	abilityLabel.Size = UDim2.new(0.65, 0, 0, 58)
+	abilityLabel.BackgroundColor3 = Color3.fromRGB(30, 77, 66)
+	abilityLabel.BackgroundTransparency = 0.08
+	abilityLabel.BorderSizePixel = 0
+	abilityLabel.Font = Enum.Font.GothamBold
+	abilityLabel.Text = "SPRINGLEGS ACTIVE\nEnhanced movement during escape"
+	abilityLabel.TextColor3 = Color3.fromRGB(137, 255, 198)
+	abilityLabel.TextScaled = true
+	abilityLabel.Visible = false
+	abilityLabel.Parent = screenGui
+
+	local abilitySizeConstraint = Instance.new("UISizeConstraint")
+	abilitySizeConstraint.MaxSize = Vector2.new(460, 58)
+	abilitySizeConstraint.MinSize = Vector2.new(280, 58)
+	abilitySizeConstraint.Parent = abilityLabel
+	abilityToast = abilityLabel
 
 	local backdrop = Instance.new("Frame")
 	backdrop.Name = "FirstTheftExplanation"
@@ -174,6 +197,40 @@ local function createPresentation()
 			remote:FireServer("NOT_YET")
 		end
 	end)
+end
+
+local function showSpringLegsActive()
+	local label = abilityToast
+	if not label then
+		return
+	end
+	abilityPresentationToken += 1
+	local token = abilityPresentationToken
+	label.TextTransparency = 0
+	label.BackgroundTransparency = 0.08
+	label.Visible = true
+	task.delay(2.8, function()
+		if token ~= abilityPresentationToken or not label then
+			return
+		end
+		local tween = TweenService:Create(label, TweenInfo.new(0.3), {
+			TextTransparency = 1,
+			BackgroundTransparency = 1,
+		})
+		tween:Play()
+		tween.Completed:Once(function()
+			if abilityPresentationToken == token then
+				label.Visible = false
+			end
+		end)
+	end)
+end
+
+local function hideSpringLegsActive()
+	abilityPresentationToken += 1
+	if abilityToast then
+		abilityToast.Visible = false
+	end
 end
 
 local function clearObjectiveCue()
@@ -299,61 +356,66 @@ local function isFiniteVector3(value: any): boolean
 		and math.abs(value.Z) < math.huge
 end
 
-local function readPayload(payload: any): (string?, number?, string?, number?, Vector3?)
+local function readPayload(payload: any): (string?, number?, string?, number?, Vector3?, boolean?)
 	if typeof(payload) ~= "table" or typeof(payload.Kind) ~= "string" then
-		return nil, nil, nil, nil, nil
+		return nil, nil, nil, nil, nil, nil
 	end
 	local kind = payload.Kind
 	if kind == "EXPLANATION" then
 		for key in pairs(payload) do
 			if key ~= "Kind" then
-				return nil, nil, nil, nil, nil
+				return nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, nil, nil, nil, nil
+		return kind, nil, nil, nil, nil, nil
 	elseif kind == "ACTIVATING" then
 		if typeof(payload.HeadStartSeconds) ~= "number"
 			or payload.HeadStartSeconds < 1
 			or payload.HeadStartSeconds > 5
 			or not isFiniteVector3(payload.DestinationPosition)
+			or typeof(payload.SpringLegsActive) ~= "boolean"
 		then
-			return nil, nil, nil, nil, nil
+			return nil, nil, nil, nil, nil, nil
 		end
 		for key in pairs(payload) do
-			if key ~= "Kind" and key ~= "HeadStartSeconds" and key ~= "DestinationPosition" then
-				return nil, nil, nil, nil, nil
+			if key ~= "Kind"
+				and key ~= "HeadStartSeconds"
+				and key ~= "DestinationPosition"
+				and key ~= "SpringLegsActive"
+			then
+				return nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, nil, nil, payload.HeadStartSeconds, payload.DestinationPosition
+		return kind, nil, nil, payload.HeadStartSeconds, payload.DestinationPosition, payload.SpringLegsActive
 	elseif kind == "CHASE_STARTED" or kind == "STAGE" then
 		if typeof(payload.Stage) ~= "number" or payload.Stage % 1 ~= 0 or payload.Stage < 1 or payload.Stage > 3 then
-			return nil, nil, nil, nil, nil
+			return nil, nil, nil, nil, nil, nil
 		end
 		for key in pairs(payload) do
 			if key ~= "Kind" and key ~= "Stage" then
-				return nil, nil, nil, nil, nil
+				return nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, payload.Stage, nil, nil, nil
+		return kind, payload.Stage, nil, nil, nil, nil
 	elseif kind == "REVEALED" then
 		if payload.SignatureId ~= "Kilnback" then
-			return nil, nil, nil, nil, nil
+			return nil, nil, nil, nil, nil, nil
 		end
 		for key in pairs(payload) do
 			if key ~= "Kind" and key ~= "SignatureId" then
-				return nil, nil, nil, nil, nil
+				return nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, nil, payload.SignatureId, nil, nil
+		return kind, nil, payload.SignatureId, nil, nil, nil
 	elseif kind == "CAUGHT" or kind == "SECURED" then
 		for key in pairs(payload) do
 			if key ~= "Kind" then
-				return nil, nil, nil, nil, nil
+				return nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, nil, nil, nil, nil
+		return kind, nil, nil, nil, nil, nil
 	end
-	return nil, nil, nil, nil, nil
+	return nil, nil, nil, nil, nil, nil
 end
 
 function FurnacePodChaseController.Start()
@@ -367,7 +429,7 @@ function FurnacePodChaseController.Start()
 	local stateRemote = requireChildOfClass(network, "FurnacePodChaseState", "RemoteEvent") :: RemoteEvent
 	confirmationRemote = requireChildOfClass(network, "FurnacePodStealConfirm", "RemoteEvent") :: RemoteEvent
 	stateRemote.OnClientEvent:Connect(function(payload: any)
-		local kind, stage, _, headStartSeconds, destinationPosition = readPayload(payload)
+		local kind, stage, _, headStartSeconds, destinationPosition, springLegsActive = readPayload(payload)
 		if not kind then
 			return
 		end
@@ -379,12 +441,23 @@ function FurnacePodChaseController.Start()
 		elseif kind == "ACTIVATING" then
 			showObjectiveCue(destinationPosition :: Vector3)
 			showMessage(
-				string.format("POD STOLEN - SCRAP WARDEN WAKING\nRUN HOME  |  %.1fs HEAD START", headStartSeconds :: number),
+				string.format(
+					"POD STOLEN - SCRAP WARDEN WAKING\nRUN HOME  |  %.1fs HEAD START",
+					headStartSeconds :: number
+				),
 				Color3.fromRGB(255, 190, 57),
 				0,
 				true
 			)
+			if springLegsActive then
+				showSpringLegsActive()
+			else
+				hideSpringLegsActive()
+			end
 		elseif kind == "CHASE_STARTED" or kind == "STAGE" then
+			if kind == "CHASE_STARTED" then
+				hideSpringLegsActive()
+			end
 			showMessage(
 				string.format("SCRAP WARDEN ACTIVE\nRETURN TO YOUR WORKSHOP  |  THREAT %d", stage :: number),
 				Color3.fromRGB(255, 190, 57),
@@ -392,12 +465,15 @@ function FurnacePodChaseController.Start()
 				true
 			)
 		elseif kind == "CAUGHT" then
+			hideSpringLegsActive()
 			clearObjectiveCue()
 			showMessage("CAUGHT - FURNACE POD LOST\nBANKED INVENTORY AND BUILDS ARE SAFE", Color3.fromRGB(255, 92, 73), 2.2, false)
 		elseif kind == "SECURED" then
+			hideSpringLegsActive()
 			clearObjectiveCue()
 			showMessage("POD SECURED\nKILNBACK REVEAL INCOMING", Color3.fromRGB(95, 244, 154), 0, false)
 		elseif kind == "REVEALED" then
+			hideSpringLegsActive()
 			clearObjectiveCue()
 			showMessage("ODDITY REVEALED\nKILNBACK", Color3.fromRGB(255, 174, 48), 4, false)
 		end

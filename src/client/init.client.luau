@@ -69,6 +69,13 @@ end
 
 local DevConsoleController = require(devConsoleControllerModule)
 
+local devInspectorControllerModule = Controllers:WaitForChild("DevInspectorController")
+if not devInspectorControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.DevInspectorController must be a ModuleScript.")
+end
+
+local DevInspectorController = require(devInspectorControllerModule)
+
 -- The client remains presentation-only: it starts a HUD that displays sanitized
 -- server snapshots, but it does not own or mutate authoritative gameplay state.
 HudController.Start()
@@ -80,5 +87,6 @@ FurnacePodChaseController.Start()
 -- The controller exits immediately outside Studio; the server remains the
 -- actual authorization boundary even when the development UI is visible.
 DevConsoleController.Start()
+DevInspectorController.Start()
 
 print(string.format("[%s][Client] Production bootstrap ready (v%s)", GameConstants.PROJECT_NAME, GameConstants.VERTICAL_SLICE_VERSION))

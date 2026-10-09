@@ -7,6 +7,7 @@ local Workspace = game:GetService("Workspace")
 local Services = script.Parent
 local ServerRoot = assert(Services.Parent, "[ODDWORKS][FurnacePodChase] Services folder must have a parent.")
 local Config = ServerRoot:WaitForChild("Config")
+local ConstructCapabilityResolver = require(Services:WaitForChild("ConstructCapabilityResolver"))
 local FurnacePodChaseConfig = require(Config:WaitForChild("FurnacePodChaseConfig"))
 local ModularPrototypeStateService = require(Services:WaitForChild("ModularPrototypeStateService"))
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
@@ -28,6 +29,24 @@ type ChaseRuntime = {
 	WardenSpawnMarker: BasePart,
 	TargetPresentation: { [BasePart]: PartPresentation },
 }
+type MovementOverride = {
+	Player: Player,
+	Humanoid: Humanoid,
+	BaselineWalkSpeed: number,
+	AppliedWalkSpeed: number,
+}
+export type DiagnosticSnapshot = {
+	Phase: string,
+	IsCarrier: boolean,
+	WardenStage: number?,
+	SpringLegsEligible: boolean,
+	SpringLegsApplicationRecord: boolean,
+	SpringLegsSpeedMatchesExpected: boolean,
+	SpringLegsEffectApplied: boolean,
+	MovementBaselineWalkSpeed: number?,
+	ExpectedSpringLegsWalkSpeed: number?,
+	ConfiguredSpringLegsMultiplier: number,
+}
 
 local FurnacePodChaseService = {}
 
@@ -43,6 +62,8 @@ local hasSeenExplanation: { [Player]: boolean } = {}
 local pendingConfirmations: { [Player]: number } = {}
 local lastAttemptTimes: { [Player]: number } = {}
 local lastConfirmationTimes: { [Player]: number } = {}
+local movementOverride: MovementOverride? = nil
+local springLegsEligibleForAttempt = false
 local activeDeathConnection: RBXScriptConnection? = nil
 local carryModel: Model? = nil
 local wardenModel: Model? = nil
@@ -93,11 +114,19 @@ end
 
 local function validateDefinition(candidate: Definition)
 	if not isPositiveFinite(candidate.MaxStealDistance)
+		or #candidate.RouteModelName == 0
+		or #candidate.WorkshopAreaMarkerName == 0
+		or #candidate.SafeRouteMarkerName == 0
+		or #candidate.ShortcutMarkerName == 0
+		or #candidate.FurnaceSiteMarkerName == 0
 		or not isPositiveFinite(candidate.AttemptIntervalSeconds)
 		or not isPositiveFinite(candidate.ConfirmationIntervalSeconds)
 		or not isPositiveFinite(candidate.ConfirmationLifetimeSeconds)
 		or not isPositiveFinite(candidate.HeadStartSeconds)
 		or candidate.HeadStartSeconds > 5
+		or not isPositiveFinite(candidate.SpringLegsSpeedMultiplier)
+		or candidate.SpringLegsSpeedMultiplier <= 1
+		or candidate.SpringLegsSpeedMultiplier > 1.5
 		or not isPositiveFinite(candidate.PollSeconds)
 		or not isPositiveFinite(candidate.CatchRadius)
 		or not isPositiveFinite(candidate.StageOneSeconds)
@@ -133,6 +162,63 @@ local function isInsideVolume(position: Vector3, volume: BasePart): boolean
 	return math.abs(localPosition.X) <= halfSize.X
 		and math.abs(localPosition.Y) <= halfSize.Y
 		and math.abs(localPosition.Z) <= halfSize.Z
+end
+
+local function restoreChaseMovement(player: Player)
+	local activeOverride = movementOverride
+	if activeOverride and activeOverride.Player == player then
+		if activeOverride.Humanoid.Parent ~= nil then
+			activeOverride.Humanoid.WalkSpeed = activeOverride.BaselineWalkSpeed
+		end
+		movementOverride = nil
+		springLegsEligibleForAttempt = false
+	elseif carrier == player then
+		springLegsEligibleForAttempt = false
+	end
+end
+
+local function applySpringLegsMovement(player: Player, humanoid: Humanoid, candidate: Definition): boolean
+	restoreChaseMovement(player)
+	if not ConstructCapabilityResolver.HasSpringLegsChaseCapability(player) then
+		return false
+	end
+	local baseline = humanoid.WalkSpeed
+	if not isPositiveFinite(baseline) then
+		return false
+	end
+	local applied = baseline * candidate.SpringLegsSpeedMultiplier
+	movementOverride = {
+		Player = player,
+		Humanoid = humanoid,
+		BaselineWalkSpeed = baseline,
+		AppliedWalkSpeed = applied,
+	}
+	springLegsEligibleForAttempt = true
+	humanoid.WalkSpeed = applied
+	return math.abs(humanoid.WalkSpeed - applied) <= 0.01
+end
+
+local function verifySpringLegsMovement(player: Player, humanoid: Humanoid): boolean
+	local activeOverride = movementOverride
+	if not activeOverride
+		or activeOverride.Player ~= player
+		or activeOverride.Humanoid ~= humanoid
+		or not springLegsEligibleForAttempt
+		or not ConstructCapabilityResolver.HasSpringLegsChaseCapability(player)
+	then
+		return false
+	end
+
+	if math.abs(humanoid.WalkSpeed - activeOverride.AppliedWalkSpeed) > 0.01 then
+		warn(string.format(
+			"[ODDWORKS][FurnacePodChase] SpringLegs WalkSpeed for %s changed from expected %.2f to %.2f during activation; restoring once at chase start.",
+			player.Name,
+			activeOverride.AppliedWalkSpeed,
+			humanoid.WalkSpeed
+		))
+		humanoid.WalkSpeed = activeOverride.AppliedWalkSpeed
+	end
+	return math.abs(humanoid.WalkSpeed - activeOverride.AppliedWalkSpeed) <= 0.01
 end
 
 local function fireCarrier(player: Player, payload: { [string]: any })
@@ -356,6 +442,7 @@ local function failAttempt(player: Player, attemptToken: number, shouldReturnToW
 	local resetToken = generation
 	state = "RESETTING"
 	carrier = nil
+	restoreChaseMovement(player)
 	disconnectActiveDeath()
 	destroyAttemptModels()
 	if shouldReturnToWorkshop then
@@ -402,6 +489,7 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 	end
 
 	state = "SECURED"
+	restoreChaseMovement(player)
 	destroyAttemptModels()
 	fireCarrier(player, { Kind = "SECURED" })
 	print(string.format("[ODDWORKS][FurnacePodChase] %s secured the Furnace Pod.", player.Name))
@@ -534,6 +622,7 @@ local function beginAttempt(
 
 	carryModel = createCarry(player, root)
 	wardenModel = createWarden(chaseRuntime.WardenSpawnMarker)
+	local springLegsActive = applySpringLegsMovement(player, humanoid, candidate)
 	activeDeathConnection = humanoid.Died:Connect(function()
 		failAttempt(player, attemptToken, false, player.Parent == Players)
 	end)
@@ -542,6 +631,7 @@ local function beginAttempt(
 		Kind = "ACTIVATING",
 		HeadStartSeconds = candidate.HeadStartSeconds,
 		DestinationPosition = secureZone.Position,
+		SpringLegsActive = springLegsActive,
 	})
 	print(string.format("[ODDWORKS][FurnacePodChase] %s stole the Furnace Pod; Warden activating.", player.Name))
 	task.spawn(runActivationTelegraph, player, attemptToken)
@@ -549,14 +639,18 @@ local function beginAttempt(
 		if generation ~= attemptToken or carrier ~= player or state ~= "ACTIVATING" then
 			return
 		end
-		local activeRoot = getCharacterRootAndHumanoid(player)
+		local activeRoot, activeHumanoid = getCharacterRootAndHumanoid(player)
 		if not activeRoot
+			or not activeHumanoid
 			or player.Parent ~= Players
 			or not PlayerStateService.HasState(player)
 			or not ModularPrototypeStateService.HasState(player)
 		then
 			failAttempt(player, attemptToken, false, player.Parent == Players)
 			return
+		end
+		if springLegsEligibleForAttempt then
+			verifySpringLegsMovement(player, activeHumanoid)
 		end
 		setWardenAlarm(true)
 		chaseStartedAt = os.clock()
@@ -626,11 +720,59 @@ local function clearPlayer(player: Player)
 	lastConfirmationTimes[player] = nil
 	if carrier == player then
 		failAttempt(player, generation, false, false)
+	else
+		restoreChaseMovement(player)
 	end
+end
+
+local function handleModularStateChanged(player: Player)
+	if carrier ~= player
+		or not springLegsEligibleForAttempt
+		or (state ~= "ACTIVATING" and state ~= "CHASE_ACTIVE")
+		or ConstructCapabilityResolver.HasSpringLegsChaseCapability(player)
+	then
+		return
+	end
+	restoreChaseMovement(player)
+end
+
+local function createLandmarkLabel(part: BasePart, name: string, text: string, color: Color3)
+	local previous = part:FindFirstChild(name)
+	if previous then
+		previous:Destroy()
+	end
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = name
+	billboard.Adornee = part
+	billboard.AlwaysOnTop = true
+	billboard.MaxDistance = 500
+	billboard.Size = UDim2.fromOffset(280, 72)
+	billboard.Parent = part
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundColor3 = Color3.fromRGB(25, 28, 29)
+	label.BackgroundTransparency = 0.15
+	label.BorderSizePixel = 0
+	label.Font = Enum.Font.GothamBold
+	label.Text = text
+	label.TextColor3 = color
+	label.TextScaled = true
+	label.Parent = billboard
 end
 
 local function discoverRuntime(candidate: Definition): ChaseRuntime
 	local world = requireChildOfClass(Workspace, "ODDWORKSWorld", "Folder")
+	local routeModel = requireChildOfClass(world, candidate.RouteModelName, "Model") :: Model
+	local workshopMarker = requireChildOfClass(routeModel, candidate.WorkshopAreaMarkerName, "BasePart") :: BasePart
+	local safeRouteMarker = requireChildOfClass(routeModel, candidate.SafeRouteMarkerName, "BasePart") :: BasePart
+	local shortcutMarker = requireChildOfClass(routeModel, candidate.ShortcutMarkerName, "BasePart") :: BasePart
+	local furnaceSiteMarker = requireChildOfClass(routeModel, candidate.FurnaceSiteMarkerName, "BasePart") :: BasePart
+	createLandmarkLabel(workshopMarker, "WorkshopAreaLabel", "WORKSHOPS\nSAFETY", Color3.fromRGB(92, 238, 157))
+	createLandmarkLabel(safeRouteMarker, "SafeRouteLabel", "LONG / OPEN\nWIDE GREEN ROUTE", Color3.fromRGB(92, 238, 157))
+	createLandmarkLabel(shortcutMarker, "ShortcutLabel", "SHORT / TECHNICAL\nJUMP BARRIERS", Color3.fromRGB(255, 177, 65))
+	createLandmarkLabel(furnaceSiteMarker, "FurnaceSiteLabel", "FURNACE SITE", Color3.fromRGB(255, 103, 52))
 	local targetModel = requireChildOfClass(world, candidate.WorldModelName, "Model") :: Model
 	local interactionPart = requireChildOfClass(targetModel, candidate.InteractionPartName, "BasePart") :: BasePart
 	local prompt = requireChildOfClass(interactionPart, "Prompt", "ProximityPrompt") :: ProximityPrompt
@@ -652,6 +794,41 @@ local function discoverRuntime(candidate: Definition): ChaseRuntime
 		Prompt = prompt,
 		WardenSpawnMarker = wardenSpawnMarker,
 		TargetPresentation = presentation,
+	}
+end
+
+-- Returns a narrow read-only view for the Studio-only inspector. Runtime models,
+-- private chase tables, and mutation functions remain inside this service.
+function FurnacePodChaseService.GetDiagnosticSnapshot(player: Player): DiagnosticSnapshot
+	local candidate = definition or FurnacePodChaseConfig.GetDefinition()
+	local isCarrier = carrier == player
+	local activePhase = state == "ACTIVATING" or state == "CHASE_ACTIVE"
+	local activeMovement = movementOverride
+	local playerMovement = if activeMovement and activeMovement.Player == player then activeMovement else nil
+	local _, humanoid = getCharacterRootAndHumanoid(player)
+	local applicationRecord = playerMovement ~= nil
+	local speedMatchesExpected = playerMovement ~= nil
+		and humanoid == playerMovement.Humanoid
+		and math.abs((humanoid :: Humanoid).WalkSpeed - playerMovement.AppliedWalkSpeed) <= 0.01
+
+	local phase = state :: string
+	if state == "SECURED" and carrier == nil then
+		phase = "REVEAL"
+	end
+
+	return {
+		Phase = phase,
+		IsCarrier = isCarrier,
+		WardenStage = if state == "CHASE_ACTIVE" then currentStage else nil,
+		SpringLegsEligible = isCarrier
+			and activePhase
+			and ConstructCapabilityResolver.HasSpringLegsChaseCapability(player),
+		SpringLegsApplicationRecord = applicationRecord,
+		SpringLegsSpeedMatchesExpected = speedMatchesExpected,
+		SpringLegsEffectApplied = applicationRecord and speedMatchesExpected,
+		MovementBaselineWalkSpeed = if playerMovement then playerMovement.BaselineWalkSpeed else nil,
+		ExpectedSpringLegsWalkSpeed = if playerMovement then playerMovement.AppliedWalkSpeed else nil,
+		ConfiguredSpringLegsMultiplier = candidate.SpringLegsSpeedMultiplier,
 	}
 end
 
@@ -679,6 +856,7 @@ function FurnacePodChaseService.Start()
 	setTargetAvailable(true)
 	local chaseRuntime = runtime :: ChaseRuntime
 	chaseRuntime.Prompt.Triggered:Connect(handlePromptTriggered)
+	ModularPrototypeStateService.ObserveStateChanged(handleModularStateChanged)
 	ModularPrototypeStateService.ObserveStateRemoved(clearPlayer)
 	Players.PlayerRemoving:Connect(clearPlayer)
 	print("[ODDWORKS][FurnacePodChase] Shared Furnace Pod chase prototype started.")
