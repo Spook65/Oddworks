@@ -407,6 +407,26 @@ function SignatureDiscoveryService.RevealKilnbackFromFurnacePod(player: Player):
 	return true
 end
 
+-- Exposes only session-discovery and derived-presence facts for the Studio
+-- inspector. Discovery ownership and runtime Instances remain private.
+function SignatureDiscoveryService.GetDiagnosticSnapshot(player: Player): { [string]: any }
+	local container = getPlayerContainer(player, false)
+	local modelCount = 0
+	if container then
+		for _, child in ipairs(container:GetChildren()) do
+			if child:IsA("Model") then
+				modelCount += 1
+			end
+		end
+	end
+
+	return {
+		Discovered = discoveries[player] == true,
+		RuntimePresent = modelCount == 1,
+		RuntimeCount = modelCount,
+	}
+end
+
 local function handleStateRequest(player: Player, ...: any)
 	if select("#", ...) ~= 0 or player.Parent ~= Players then
 		return

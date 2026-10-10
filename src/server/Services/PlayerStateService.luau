@@ -302,7 +302,7 @@ function PlayerStateService.AddHype(player: Player, amount: number): boolean
 end
 
 -- Checks authoritative Hype affordability without changing the player's balance.
--- Upgrade transactions still revalidate during SpendHype to avoid stale assumptions.
+-- Upgrade transactions still revalidate during their atomic commit.
 function PlayerStateService.CanAffordHype(player: Player, amount: number): boolean
 	local state = playerStates[player]
 	if not state or not isPositiveFiniteInteger(amount) then
@@ -325,6 +325,43 @@ function PlayerStateService.SpendHype(player: Player, amount: number): boolean
 	end
 
 	state.Hype -= amount
+	notifyStateChanged(player)
+	return true
+end
+
+-- Commits the configured Hype cost and level transition together. Callers may
+-- validate presentation/context first, but no observer can see a paid-for
+-- upgrade without its matching level change.
+function PlayerStateService.UpgradeWorkshop(
+	player: Player,
+	expectedCurrentLevel: number,
+	newLevel: number,
+	hypeCost: number
+): boolean
+	local state = playerStates[player]
+	if not state
+		or not isPositiveFiniteInteger(expectedCurrentLevel)
+		or not isPositiveFiniteInteger(newLevel)
+		or not isPositiveFiniteInteger(hypeCost)
+		or state.WorkshopLevel ~= expectedCurrentLevel
+		or state.Hype < hypeCost
+		or newLevel ~= expectedCurrentLevel + 1
+	then
+		return false
+	end
+
+	local currentDefinition = WorkshopLevels.GetDefinition(expectedCurrentLevel)
+	local nextDefinition = WorkshopLevels.GetDefinition(newLevel)
+	if not currentDefinition
+		or currentDefinition.NextLevel ~= newLevel
+		or currentDefinition.UpgradeCost ~= hypeCost
+		or not nextDefinition
+	then
+		return false
+	end
+
+	state.Hype -= hypeCost
+	state.WorkshopLevel = newLevel
 	notifyStateChanged(player)
 	return true
 end
@@ -365,7 +402,7 @@ function PlayerStateService.AdvanceWorkshopLevel(
 end
 
 -- Checks affordability without changing state.
--- Crafting uses this before attempting a transaction, but SpendScrap still validates again.
+-- Crafting uses this for a precise result code, then its atomic commit revalidates.
 function PlayerStateService.CanAffordScrap(player: Player, amount: number): boolean
 	local state = playerStates[player]
 	if not state then
@@ -396,6 +433,37 @@ function PlayerStateService.SpendScrap(player: Player, amount: number): boolean
 	end
 
 	state.Scrap -= amount
+	notifyStateChanged(player)
+	return true
+end
+
+-- Commits Scrap consumption and configured ownership output as one no-yield
+-- transaction. This avoids exposing a transient spent-without-reward snapshot
+-- to replication or persistence observers.
+function PlayerStateService.CraftOddling(
+	player: Player,
+	scrapCost: number,
+	speciesId: string,
+	amount: number
+): boolean
+	local state = playerStates[player]
+	if not state
+		or not isPositiveFiniteInteger(scrapCost)
+		or not isPositiveFiniteInteger(amount)
+		or not isBoundedIdentifier(speciesId, MAX_OWNED_ODDLING_ID_LENGTH)
+		or not Oddlings.GetDefinition(speciesId)
+		or state.Scrap < scrapCost
+	then
+		return false
+	end
+
+	local currentCount = state.OwnedOddlings[speciesId] or 0
+	if not canAddWithoutOverflow(currentCount, amount) then
+		return false
+	end
+
+	state.Scrap -= scrapCost
+	state.OwnedOddlings[speciesId] = currentCount + amount
 	notifyStateChanged(player)
 	return true
 end

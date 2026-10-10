@@ -126,8 +126,8 @@ local function readRecipeId(...: any): string?
 	return recipeId
 end
 
--- Performs the server-authoritative transaction with an explicit refund path.
--- Ownership remains the durable session truth; physical display is downstream representation.
+-- Performs one server-authoritative Scrap/ownership commit. Ownership remains
+-- durable session truth; physical display is downstream representation.
 local function executeCraftTransaction(player: Player, recipe: RecipeDefinition): CraftResultCode
 	if not PlayerStateService.IsRecipeUnlocked(player, recipe.RecipeId) then
 		return RESULT_RECIPE_LOCKED
@@ -154,18 +154,13 @@ local function executeCraftTransaction(player: Player, recipe: RecipeDefinition)
 		return RESULT_NOT_ENOUGH_SCRAP
 	end
 
-	local didSpendScrap = PlayerStateService.SpendScrap(player, recipe.ScrapCost)
-	if not didSpendScrap then
-		return RESULT_NOT_ENOUGH_SCRAP
-	end
-
-	local didRecordOwnership = PlayerStateService.AddOwnedOddling(player, recipe.OutputSpeciesId, OWNERSHIP_INCREMENT)
-	if not didRecordOwnership then
-		local didRefund = PlayerStateService.AddScrap(player, recipe.ScrapCost)
-		if not didRefund then
-			warn(string.format("[ODDWORKS][CraftingService] Failed to refund Scrap after craft rollback for %s.", player.Name))
-		end
-
+	local didCommit = PlayerStateService.CraftOddling(
+		player,
+		recipe.ScrapCost,
+		recipe.OutputSpeciesId,
+		OWNERSHIP_INCREMENT
+	)
+	if not didCommit then
 		return RESULT_CRAFT_FAILED
 	end
 

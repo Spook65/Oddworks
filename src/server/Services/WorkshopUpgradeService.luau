@@ -159,8 +159,8 @@ local function isPlayerNearStation(player: Player, station: BasePart): boolean
 	return (rootPart.Position - station.Position).Magnitude <= MAX_VALID_DISTANCE
 end
 
--- Executes the one-time Hype-to-level transaction with an exact refund path.
--- Display changes remain downstream consequences of the PlayerState notification.
+-- Executes the one-time Hype-to-level transaction as one PlayerState commit.
+-- Display changes remain downstream consequences of its single notification.
 local function executeUpgrade(player: Player, definition: WorkshopLevelDefinition): boolean
 	local upgradeCost = definition.UpgradeCost
 	local nextLevel = definition.NextLevel
@@ -173,17 +173,7 @@ local function executeUpgrade(player: Player, definition: WorkshopLevelDefinitio
 		return false
 	end
 
-	if not PlayerStateService.SpendHype(player, upgradeCost) then
-		return false
-	end
-
-	if not PlayerStateService.AdvanceWorkshopLevel(player, definition.Level, nextLevel) then
-		local didRefund = PlayerStateService.AddHype(player, upgradeCost)
-		if not didRefund then
-			warn(string.format("[ODDWORKS][WorkshopUpgrade] Failed to refund Hype to %s after rollback.", player.Name))
-		end
-
-		warn(string.format("[ODDWORKS][WorkshopUpgrade] Rolled back failed level advancement for %s.", player.Name))
+	if not PlayerStateService.UpgradeWorkshop(player, definition.Level, nextLevel, upgradeCost) then
 		return false
 	end
 
@@ -248,6 +238,15 @@ local function handleUpgradeTriggered(player: Player, record: UpgradeStation)
 	end
 end
 
+local function cleanupPlayer(player: Player)
+	lastAttemptTimes[player] = nil
+	local plotId = lastKnownPlotIds[player]
+	lastKnownPlotIds[player] = nil
+	if plotId and stationsByPlotId[plotId] then
+		stationsByPlotId[plotId].Prompt.Enabled = false
+	end
+end
+
 -- Starts station discovery after PlayerState and WorkshopService are ready.
 -- State notifications keep prompt availability aligned with each plot owner's level.
 function WorkshopUpgradeService.Start()
@@ -265,14 +264,8 @@ function WorkshopUpgradeService.Start()
 	end
 
 	PlayerStateService.ObserveStateChanged(updatePromptForPlayer)
-	Players.PlayerRemoving:Connect(function(player: Player)
-		lastAttemptTimes[player] = nil
-		local plotId = lastKnownPlotIds[player]
-		lastKnownPlotIds[player] = nil
-		if plotId and stationsByPlotId[plotId] then
-			stationsByPlotId[plotId].Prompt.Enabled = false
-		end
-	end)
+	PlayerStateService.ObserveStateRemoved(cleanupPlayer)
+	Players.PlayerRemoving:Connect(cleanupPlayer)
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		updatePromptForPlayer(player)

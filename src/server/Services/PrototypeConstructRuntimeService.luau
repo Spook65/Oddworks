@@ -1017,6 +1017,30 @@ function PrototypeConstructRuntimeService.Reconcile(player: Player): boolean
 	return true
 end
 
+-- Returns presence/count facts only for Studio diagnostics. Authoritative
+-- Construct data remains in ModularPrototypeStateService and no runtime
+-- Instance reference crosses this boundary.
+function PrototypeConstructRuntimeService.GetDiagnosticSnapshot(player: Player): { [string]: any }
+	local stateSnapshot = ModularPrototypeStateService.GetSnapshot(player)
+	local expected = stateSnapshot ~= nil and stateSnapshot.PrototypeConstruct ~= nil
+	local container = getExistingPlayerContainer(player)
+	local modelCount = 0
+	if container then
+		for _, child in ipairs(container:GetChildren()) do
+			if child:IsA("Model") then
+				modelCount += 1
+			end
+		end
+	end
+
+	return {
+		Expected = expected,
+		ContainerPresent = container ~= nil,
+		ModelPresent = modelCount == 1,
+		ModelCount = modelCount,
+	}
+end
+
 local function cleanupPlayer(player: Player)
 	pendingReconciliations[player] = nil
 	removeRuntime(player, true)

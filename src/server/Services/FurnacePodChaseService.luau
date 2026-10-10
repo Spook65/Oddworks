@@ -37,8 +37,11 @@ type MovementOverride = {
 }
 export type DiagnosticSnapshot = {
 	Phase: string,
+	AttemptGeneration: number,
 	IsCarrier: boolean,
 	WardenStage: number?,
+	CarryRuntimePresent: boolean,
+	WardenRuntimePresent: boolean,
 	SpringLegsEligible: boolean,
 	SpringLegsApplicationRecord: boolean,
 	SpringLegsSpeedMatchesExpected: boolean,
@@ -67,6 +70,7 @@ local springLegsEligibleForAttempt = false
 local activeDeathConnection: RBXScriptConnection? = nil
 local carryModel: Model? = nil
 local wardenModel: Model? = nil
+local wardenCFrame: CFrame? = nil
 local runtimeFolder: Folder? = nil
 local runtime: ChaseRuntime? = nil
 local definition: Definition? = nil
@@ -260,6 +264,7 @@ local function destroyAttemptModels()
 		wardenModel:Destroy()
 		wardenModel = nil
 	end
+	wardenCFrame = nil
 end
 
 local function newDisplayPart(
@@ -373,6 +378,57 @@ local function createWarden(spawnMarker: BasePart): Model
 	return model
 end
 
+local function isCarryRuntimePresent(player: Player): boolean
+	local model = carryModel
+	local character = player.Character
+	if not model or not character or model.Parent ~= character then
+		return false
+	end
+	local root = model:FindFirstChild("RootPart")
+	local weld = if root then root:FindFirstChild("CharacterCarryWeld") else nil
+	return root ~= nil
+		and root:IsA("BasePart")
+		and model.PrimaryPart == root
+		and weld ~= nil
+		and weld:IsA("WeldConstraint")
+		and weld.Part0 ~= nil
+		and weld.Part0:IsDescendantOf(character)
+		and weld.Part1 == root
+end
+
+local function isWardenRuntimePresent(): boolean
+	local model = wardenModel
+	local folder = runtimeFolder
+	return model ~= nil
+		and folder ~= nil
+		and model.Parent == folder
+		and model.PrimaryPart ~= nil
+		and model.PrimaryPart:IsDescendantOf(model)
+end
+
+-- Carry and Warden models are disposable projections of an active server
+-- attempt. If either whole model disappears, rebuild it without touching chase
+-- ownership, rewards, or the attempt generation.
+local function ensureAttemptModels(player: Player, characterRoot: BasePart, chaseRuntime: ChaseRuntime): boolean
+	if not isCarryRuntimePresent(player) then
+		if carryModel then
+			carryModel:Destroy()
+		end
+		carryModel = createCarry(player, characterRoot)
+	end
+
+	if not isWardenRuntimePresent() then
+		if wardenModel then
+			wardenModel:Destroy()
+		end
+		local replacement = createWarden(chaseRuntime.WardenSpawnMarker)
+		replacement:PivotTo(wardenCFrame or chaseRuntime.WardenSpawnMarker.CFrame)
+		wardenModel = replacement
+	end
+
+	return isCarryRuntimePresent(player) and isWardenRuntimePresent()
+end
+
 local function setWardenAlarm(bright: boolean)
 	local model = wardenModel
 	if not model then
@@ -457,6 +513,15 @@ local function failAttempt(player: Player, attemptToken: number, shouldReturnToW
 	end
 end
 
+local function cancelAttempt(player: Player, attemptToken: number, reason: string)
+	if generation ~= attemptToken or carrier ~= player then
+		return
+	end
+	failAttempt(player, attemptToken, false, false)
+	fireCarrier(player, { Kind = "CANCELLED" })
+	warn(string.format("[ODDWORKS][FurnacePodChase] Cancelled %s attempt: %s.", player.Name, reason))
+end
+
 local function getStage(elapsed: number, candidate: Definition): number
 	if elapsed < candidate.StageOneSeconds then
 		return 1
@@ -479,6 +544,7 @@ local function moveWardenToward(targetPosition: Vector3, speed: number, deltaTim
 		local direction = offset.Unit
 		local newPosition = pivot.Position + direction * math.min(speed * deltaTime, distance)
 		model:PivotTo(CFrame.lookAt(newPosition, newPosition + direction))
+		wardenCFrame = model:GetPivot()
 	end
 	return distance
 end
@@ -504,6 +570,10 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 		then
 			return
 		end
+		if not WorkshopService.GetAssignedPlot(player) then
+			cancelAttempt(player, attemptToken, "WORKSHOP_UNAVAILABLE")
+			return
+		end
 		local _, humanoid = getCharacterRootAndHumanoid(player)
 		if not humanoid then
 			failAttempt(player, attemptToken, false, false)
@@ -512,7 +582,7 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 
 		if not SignatureDiscoveryService.RevealKilnbackFromFurnacePod(player) then
 			warn(string.format("[ODDWORKS][FurnacePodChase] Kilnback reveal failed for %s; resetting attempt.", player.Name))
-			failAttempt(player, attemptToken, false, true)
+			cancelAttempt(player, attemptToken, "REVEAL_FAILED")
 			return
 		end
 
@@ -530,9 +600,18 @@ local function runChase(player: Player, attemptToken: number, candidate: Definit
 			failAttempt(player, attemptToken, false, player.Parent == Players)
 			return
 		end
+		local chaseRuntime = runtime
+		if not chaseRuntime or not ensureAttemptModels(player, root, chaseRuntime) then
+			cancelAttempt(player, attemptToken, "RUNTIME_UNAVAILABLE")
+			return
+		end
 
 		local secureZone = getAssignedSecureZone(player, candidate)
-		if secureZone and isInsideVolume(root.Position, secureZone) then
+		if not secureZone then
+			cancelAttempt(player, attemptToken, "WORKSHOP_UNAVAILABLE")
+			return
+		end
+		if isInsideVolume(root.Position, secureZone) then
 			completeSecure(player, attemptToken, candidate)
 			return
 		end
@@ -622,6 +701,7 @@ local function beginAttempt(
 
 	carryModel = createCarry(player, root)
 	wardenModel = createWarden(chaseRuntime.WardenSpawnMarker)
+	wardenCFrame = chaseRuntime.WardenSpawnMarker.CFrame
 	local springLegsActive = applySpringLegsMovement(player, humanoid, candidate)
 	activeDeathConnection = humanoid.Died:Connect(function()
 		failAttempt(player, attemptToken, false, player.Parent == Players)
@@ -647,6 +727,15 @@ local function beginAttempt(
 			or not ModularPrototypeStateService.HasState(player)
 		then
 			failAttempt(player, attemptToken, false, player.Parent == Players)
+			return
+		end
+		local currentSecureZone = getAssignedSecureZone(player, candidate)
+		if not currentSecureZone then
+			cancelAttempt(player, attemptToken, "WORKSHOP_UNAVAILABLE")
+			return
+		end
+		if not ensureAttemptModels(player, activeRoot, chaseRuntime) then
+			cancelAttempt(player, attemptToken, "RUNTIME_UNAVAILABLE")
 			return
 		end
 		if springLegsEligibleForAttempt then
@@ -901,8 +990,11 @@ function FurnacePodChaseService.GetDiagnosticSnapshot(player: Player): Diagnosti
 
 	return {
 		Phase = phase,
+		AttemptGeneration = generation,
 		IsCarrier = isCarrier,
 		WardenStage = if state == "CHASE_ACTIVE" then currentStage else nil,
+		CarryRuntimePresent = isCarrier and isCarryRuntimePresent(player),
+		WardenRuntimePresent = isCarrier and isWardenRuntimePresent(),
 		SpringLegsEligible = isCarrier
 			and activePhase
 			and ConstructCapabilityResolver.HasSpringLegsChaseCapability(player),

@@ -104,17 +104,20 @@ local function hasExactKeys(value: any, expectedKeys: { [string]: boolean }): bo
 		return false
 	end
 
+	local expectedCount = 0
+	for _ in pairs(expectedKeys) do
+		expectedCount += 1
+	end
+
 	local seenCount = 0
 	for key in pairs(value) do
 		if typeof(key) ~= "string" or not expectedKeys[key] then
 			return false
 		end
 		seenCount += 1
-	end
-
-	local expectedCount = 0
-	for _ in pairs(expectedKeys) do
-		expectedCount += 1
+		if seenCount > expectedCount then
+			return false
+		end
 	end
 	return seenCount == expectedCount
 end

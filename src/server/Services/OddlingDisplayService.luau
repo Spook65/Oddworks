@@ -727,6 +727,13 @@ function OddlingDisplayService.Reconcile(player: Player): boolean
 	return true
 end
 
+local function cleanupPlayer(player: Player)
+	pendingReconciliations[player] = nil
+	capacityWarningKeys[player] = nil
+	cleanupPlayerDisplays(player)
+	suppressContainerRecovery[player] = nil
+end
+
 -- Starts after PlayerStateService and WorkshopService. State changes reconcile
 -- derived visuals; player removal cleans only that player's runtime container.
 function OddlingDisplayService.Start()
@@ -795,12 +802,8 @@ function OddlingDisplayService.Start()
 		queueReconcile(player)
 	end)
 
-	Players.PlayerRemoving:Connect(function(player: Player)
-		pendingReconciliations[player] = nil
-		capacityWarningKeys[player] = nil
-		cleanupPlayerDisplays(player)
-		suppressContainerRecovery[player] = nil
-	end)
+	PlayerStateService.ObserveStateRemoved(cleanupPlayer)
+	Players.PlayerRemoving:Connect(cleanupPlayer)
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		queueReconcile(player)

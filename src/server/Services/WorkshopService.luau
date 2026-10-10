@@ -156,6 +156,7 @@ function WorkshopService.Start()
 
 	Players.PlayerAdded:Connect(assignPlayerWhenStateReady)
 	Players.PlayerRemoving:Connect(releasePlayer)
+	PlayerStateService.ObserveStateRemoved(releasePlayer)
 	PlayerStateService.ObserveStateChanged(function(player: Player)
 		if playerPlotIds[player] == nil then
 			assignPlayerWhenStateReady(player)

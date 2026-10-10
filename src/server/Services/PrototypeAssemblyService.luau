@@ -98,17 +98,20 @@ local function hasExactKeys(value: any, expectedKeys: { [string]: boolean }): bo
 		return false
 	end
 
+	local expectedCount = 0
+	for _ in pairs(expectedKeys) do
+		expectedCount += 1
+	end
+
 	local seenCount = 0
 	for key in pairs(value) do
 		if typeof(key) ~= "string" or not expectedKeys[key] then
 			return false
 		end
 		seenCount += 1
-	end
-
-	local expectedCount = 0
-	for _ in pairs(expectedKeys) do
-		expectedCount += 1
+		if seenCount > expectedCount then
+			return false
+		end
 	end
 	return seenCount == expectedCount
 end
@@ -197,8 +200,6 @@ end
 
 local function handleAssemblyRequest(player: Player, ...: any)
 	local argumentCount = select("#", ...)
-	local request = if argumentCount == 1 then select(1, ...) else nil
-	local hasValidShape = argumentCount == 1 and hasValidRequestShape(request)
 	if player.Parent ~= Players
 		or not PlayerStateService.HasState(player)
 		or not ModularPrototypeStateService.HasState(player)
@@ -210,7 +211,12 @@ local function handleAssemblyRequest(player: Player, ...: any)
 		sendResult(player, "RATE_LIMITED")
 		return
 	end
-	if not hasValidShape then
+	if argumentCount ~= 1 then
+		sendResult(player, "INVALID_REQUEST")
+		return
+	end
+	local request = select(1, ...)
+	if not hasValidRequestShape(request) then
 		sendResult(player, "INVALID_REQUEST")
 		return
 	end

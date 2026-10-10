@@ -8,7 +8,10 @@ local Services = script.Parent
 local ConstructCapabilityResolver = require(Services:WaitForChild("ConstructCapabilityResolver"))
 local FurnacePodChaseService = require(Services:WaitForChild("FurnacePodChaseService"))
 local ModularPrototypeStateService = require(Services:WaitForChild("ModularPrototypeStateService"))
+local PersistenceService = require(Services:WaitForChild("PersistenceService"))
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
+local PrototypeConstructRuntimeService = require(Services:WaitForChild("PrototypeConstructRuntimeService"))
+local SignatureDiscoveryService = require(Services:WaitForChild("SignatureDiscoveryService"))
 local WorkshopService = require(Services:WaitForChild("WorkshopService"))
 
 type SpeedOverride = {
@@ -52,9 +55,12 @@ local function getLiveHumanoid(player: Player): Humanoid?
 	return if humanoid and humanoid.Health > 0 then humanoid else nil
 end
 
-local function isAuthorized(player: Player): boolean
-	return RunService:IsStudio()
-		and player.Parent == Players
+local function isDevelopmentContext(player: Player): boolean
+	return RunService:IsStudio() and player.Parent == Players
+end
+
+local function isMutationAuthorized(player: Player): boolean
+	return isDevelopmentContext(player)
 		and PlayerStateService.HasState(player)
 		and ModularPrototypeStateService.HasState(player)
 end
@@ -121,18 +127,18 @@ local function summarizeComponents(componentCounts: ModularPrototypeStateService
 end
 
 local function buildSnapshot(player: Player, actionMessage: string?, actionSucceeded: boolean?): { [string]: any }?
-	if not isAuthorized(player) then
+	if not isDevelopmentContext(player) then
 		return nil
 	end
 	local playerState = PlayerStateService.GetSnapshot(player)
 	local modularState = ModularPrototypeStateService.GetSnapshot(player)
-	if not playerState or not modularState then
-		return nil
-	end
 
 	local humanoid = getLiveHumanoid(player)
-	local construct = modularState.PrototypeConstruct
+	local construct = if modularState then modularState.PrototypeConstruct else nil
 	local chase = FurnacePodChaseService.GetDiagnosticSnapshot(player)
+	local constructRuntime = PrototypeConstructRuntimeService.GetDiagnosticSnapshot(player)
+	local signatureRuntime = SignatureDiscoveryService.GetDiagnosticSnapshot(player)
+	local persistenceStatus = PersistenceService.GetStatus(player)
 	local speedOverride = speedOverrides[player]
 	if speedOverride and speedOverride.Humanoid.Parent == nil then
 		speedOverrides[player] = nil
@@ -163,6 +169,10 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 	return {
 		PlayerName = player.Name,
 		UserId = player.UserId,
+		PlayerStateReady = PlayerStateService.HasState(player),
+		ModularStateReady = ModularPrototypeStateService.HasState(player),
+		PersistenceStatus = persistenceStatus,
+		ProfileSessionActive = persistenceStatus == "Ready",
 		CharacterPresent = humanoid ~= nil,
 		Health = if humanoid then humanoid.Health else nil,
 		MaxHealth = if humanoid then humanoid.MaxHealth else nil,
@@ -180,14 +190,23 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 		ExpectedSpringLegsWalkSpeed = expectedWalkSpeed,
 		SpringLegsEligible = chase.SpringLegsEligible,
 		ChasePhase = chase.Phase,
+		ChaseAttemptGeneration = chase.AttemptGeneration,
 		IsCarrier = chase.IsCarrier,
 		WardenStage = chase.WardenStage,
-		AssignedPlotId = WorkshopService.GetAssignedPlotId(player) or playerState.AssignedPlotId,
-		Scrap = playerState.Scrap,
-		Hype = playerState.Hype,
-		WorkshopLevel = playerState.WorkshopLevel,
-		BankedSummary = summarizeComponents(modularState.BankedComponents),
-		UnbankedSummary = summarizeComponents(modularState.UnbankedComponents),
+		CarryRuntimePresent = chase.CarryRuntimePresent,
+		WardenRuntimePresent = chase.WardenRuntimePresent,
+		AssignedPlotId = WorkshopService.GetAssignedPlotId(player) or (if playerState then playerState.AssignedPlotId else nil),
+		ConstructRuntimeExpected = constructRuntime.Expected,
+		ConstructRuntimePresent = constructRuntime.ModelPresent,
+		ConstructRuntimeCount = constructRuntime.ModelCount,
+		KilnbackDiscovered = signatureRuntime.Discovered,
+		KilnbackRuntimePresent = signatureRuntime.RuntimePresent,
+		KilnbackRuntimeCount = signatureRuntime.RuntimeCount,
+		Scrap = if playerState then playerState.Scrap else nil,
+		Hype = if playerState then playerState.Hype else nil,
+		WorkshopLevel = if playerState then playerState.WorkshopLevel else nil,
+		BankedSummary = if modularState then summarizeComponents(modularState.BankedComponents) else "Unavailable",
+		UnbankedSummary = if modularState then summarizeComponents(modularState.UnbankedComponents) else "Unavailable",
 		DevWalkSpeedOverride = speedOverride ~= nil,
 		DevOverrideWalkSpeed = if speedOverride then speedOverride.OverrideWalkSpeed else nil,
 		DevOverrideBaselineWalkSpeed = if speedOverride then speedOverride.BaselineWalkSpeed else nil,
@@ -211,7 +230,7 @@ end
 
 local function handleSnapshotRequest(player: Player, ...: any)
 	if select("#", ...) ~= 0
-		or not isAuthorized(player)
+		or not isDevelopmentContext(player)
 		or not passesThrottle(lastSnapshotRequests, player, SNAPSHOT_INTERVAL_SECONDS)
 	then
 		return
@@ -221,7 +240,7 @@ end
 
 local function handleSetWalkSpeed(player: Player, requestedWalkSpeed: any, ...: any)
 	if select("#", ...) ~= 0
-		or not isAuthorized(player)
+		or not isMutationAuthorized(player)
 		or not passesThrottle(lastMutationRequests, player, MUTATION_INTERVAL_SECONDS)
 	then
 		return
@@ -258,7 +277,7 @@ end
 
 local function handleResetWalkSpeed(player: Player, ...: any)
 	if select("#", ...) ~= 0
-		or not isAuthorized(player)
+		or not isMutationAuthorized(player)
 		or not passesThrottle(lastMutationRequests, player, MUTATION_INTERVAL_SECONDS)
 	then
 		return
@@ -281,6 +300,10 @@ local function handleResetWalkSpeed(player: Player, ...: any)
 end
 
 local function clearPlayer(player: Player)
+	local existing = speedOverrides[player]
+	if existing and existing.Humanoid.Parent ~= nil then
+		existing.Humanoid.WalkSpeed = existing.BaselineWalkSpeed
+	end
 	speedOverrides[player] = nil
 	lastSnapshotRequests[player] = nil
 	lastMutationRequests[player] = nil
@@ -311,6 +334,7 @@ function DevInspectorService.Start()
 	setSpeedRequest.OnServerEvent:Connect(handleSetWalkSpeed)
 	resetSpeedRequest.OnServerEvent:Connect(handleResetWalkSpeed)
 	Players.PlayerAdded:Connect(bindPlayer)
+	PlayerStateService.ObserveStateRemoved(clearPlayer)
 	Players.PlayerRemoving:Connect(clearPlayer)
 	for _, player in ipairs(Players:GetPlayers()) do
 		bindPlayer(player)
