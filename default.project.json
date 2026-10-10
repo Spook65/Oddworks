@@ -1690,9 +1690,9 @@
           "$properties": {
             "Anchored": true,
             "Size": [
-              200,
+              320,
               1,
-              380
+              400
             ],
             "Position": [
               0,
@@ -2054,7 +2054,7 @@
               "Anchored": true,
               "CanCollide": true,
               "Size": [7, 4, 7],
-              "Position": [-41, 2, 43],
+              "Position": [-125, 2, 190],
               "Color": [0.28627450980392155, 0.3137254901960784, 0.32941176470588235],
               "Material": "CorrodedMetal"
             }
@@ -2065,7 +2065,7 @@
               "Anchored": true,
               "CanCollide": true,
               "Size": [0.45, 3.2, 4.8],
-              "Position": [-37.35, 2, 43],
+              "Position": [-121.35, 2, 190],
               "Color": [0.6509803921568628, 0.38823529411764707, 0.1803921568627451],
               "Material": "DiamondPlate"
             }
@@ -2076,7 +2076,7 @@
               "Anchored": true,
               "CanCollide": true,
               "Size": [1.2, 2.1, 2],
-              "Position": [-36.55, 1.25, 43],
+              "Position": [-120.55, 1.25, 190],
               "Color": [0.16862745098039217, 0.18823529411764706, 0.19607843137254902],
               "Material": "Metal"
             },
@@ -2099,7 +2099,7 @@
               "CanQuery": false,
               "CanTouch": false,
               "Size": [0.8, 0.8, 0.8],
-              "Position": [-37.2, 4.15, 43],
+              "Position": [-121.2, 4.15, 190],
               "Shape": "Ball",
               "Color": [0.1450980392156863, 0.1803921568627451, 0.17647058823529413],
               "Material": "Metal"
@@ -2113,7 +2113,7 @@
               "CanQuery": false,
               "CanTouch": false,
               "Size": [0.2, 0.2, 0.2],
-              "Position": [-38, 5.5, 43],
+              "Position": [-122, 5.5, 190],
               "Transparency": 1
             }
           },
@@ -2125,7 +2125,7 @@
               "CanQuery": false,
               "CanTouch": false,
               "Size": [0.2, 0.2, 0.2],
-              "Position": [-32, 0, 39.8],
+              "Position": [-116, 0, 186.8],
               "Transparency": 1
             }
           },
@@ -2137,7 +2137,7 @@
               "CanQuery": false,
               "CanTouch": false,
               "Size": [0.2, 0.2, 0.2],
-              "Position": [-32, 0, 47.2],
+              "Position": [-116, 0, 194.2],
               "Transparency": 1
             }
           }
@@ -2547,7 +2547,7 @@
               "CanQuery": true,
               "CanTouch": false,
               "Size": [8, 0.2, 22],
-              "Position": [41, 0.1, 43.5],
+              "Position": [-100, 0.1, 155],
               "Color": [0.1843137254901961, 0.2, 0.2235294117647059],
               "Material": "DiamondPlate",
               "TopSurface": "Smooth",
@@ -2562,7 +2562,7 @@
               "CanQuery": true,
               "CanTouch": false,
               "Size": [0.5, 8, 22],
-              "Position": [36.75, 4.1, 43.5],
+              "Position": [-104.25, 4.1, 155],
               "Color": [0.34509803921568627, 0.3764705882352941, 0.4117647058823529],
               "Material": "CorrodedMetal",
               "TopSurface": "Smooth",
@@ -2577,7 +2577,7 @@
               "CanQuery": true,
               "CanTouch": false,
               "Size": [0.5, 8, 22],
-              "Position": [45.25, 4.1, 43.5],
+              "Position": [-95.75, 4.1, 155],
               "Color": [0.34509803921568627, 0.3764705882352941, 0.4117647058823529],
               "Material": "CorrodedMetal",
               "TopSurface": "Smooth",
@@ -2592,7 +2592,7 @@
               "CanQuery": true,
               "CanTouch": false,
               "Size": [9, 8, 0.5],
-              "Position": [41, 4.1, 54.75],
+              "Position": [-100, 4.1, 166.25],
               "Color": [0.34509803921568627, 0.3764705882352941, 0.4117647058823529],
               "Material": "CorrodedMetal",
               "TopSurface": "Smooth",
@@ -2607,7 +2607,7 @@
               "CanQuery": false,
               "CanTouch": false,
               "Size": [8, 0.25, 1],
-              "Position": [41, 0.325, 33.5],
+              "Position": [-100, 0.325, 145],
               "Color": [0.9294117647058824, 0.7529411764705882, 0.28627450980392155],
               "Material": "Neon"
             }
@@ -2620,7 +2620,7 @@
               "CanQuery": false,
               "CanTouch": false,
               "Size": [6, 1, 0.5],
-              "Position": [41, 4, 33.5],
+              "Position": [-100, 4, 145],
               "Transparency": 1
             }
           },
@@ -2632,7 +2632,7 @@
               "CanQuery": false,
               "CanTouch": false,
               "Size": [6, 0.15, 3],
-              "Position": [41, 0.275, 36.5],
+              "Position": [-100, 0.275, 148],
               "Color": [0.2823529411764706, 0.8392156862745098, 0.5372549019607843],
               "Material": "Neon",
               "Transparency": 0.3
@@ -2646,7 +2646,7 @@
               "CanQuery": false,
               "CanTouch": false,
               "Size": [8, 6, 4],
-              "Position": [41, 3.2, 43.5],
+              "Position": [-100, 3.2, 155],
               "Color": [1, 0.7490196078431373, 0.25098039215686274],
               "Material": "Neon",
               "Transparency": 0.55
@@ -2660,7 +2660,7 @@
               "CanQuery": false,
               "CanTouch": false,
               "Size": [6, 1.25, 0.5],
-              "Position": [41, 5.25, 43.5],
+              "Position": [-100, 5.25, 155],
               "Color": [1, 0.7490196078431373, 0.25098039215686274],
               "Material": "Neon"
             }
@@ -2673,7 +2673,7 @@
               "CanQuery": true,
               "CanTouch": false,
               "Size": [4, 3, 4],
-              "Position": [41, 1.7, 52],
+              "Position": [-100, 1.7, 163.5],
               "Color": [0.17647058823529413, 0.5843137254901961, 0.6509803921568628],
               "Material": "Metal",
               "TopSurface": "Smooth",
@@ -2698,7 +2698,7 @@
               "CanQuery": false,
               "CanTouch": false,
               "Size": [7.5, 6, 5],
-              "Position": [41, 3.2, 51.5],
+              "Position": [-100, 3.2, 163],
               "Transparency": 1
             }
           }
@@ -2713,9 +2713,9 @@
               24
             ],
             "Position": [
-              0,
+              -100,
               0.3,
-              44
+              100
             ],
             "Color": [
               0.5176470588235295,
@@ -2736,7 +2736,7 @@
                 "CanQuery": true,
                 "CanTouch": false,
                 "Size": [8, 3, 5],
-                "Position": [0, 1.975, 37],
+                "Position": [-100, 1.975, 93],
                 "Color": [0.40784313725490196, 0.3254901960784314, 0.24705882352941178],
                 "Material": "CorrodedMetal",
                 "TopSurface": "Smooth",
@@ -2761,7 +2761,7 @@
                 "CanQuery": false,
                 "CanTouch": false,
                 "Size": [2.2, 0.5, 2.2],
-                "Position": [0, 3.725, 37],
+                "Position": [-100, 3.725, 93],
                 "Color": [0.35294117647058826, 0.9019607843137255, 0.5882352941176471],
                 "Material": "Neon",
                 "TopSurface": "Smooth",
@@ -2777,7 +2777,7 @@
               "CanQuery": true,
               "CanTouch": false,
               "Size": [4, 3, 4],
-              "Position": [-12, 1.975, 38],
+              "Position": [-112, 1.975, 94],
               "Color": [0.9019607843137255, 0.9019607843137255, 0.8431372549019608],
               "Material": "CorrodedMetal",
               "TopSurface": "Smooth",
@@ -2802,7 +2802,7 @@
               "CanQuery": true,
               "CanTouch": false,
               "Size": [4, 3, 4],
-              "Position": [12, 1.975, 38],
+              "Position": [-88, 1.975, 94],
               "Color": [0.5176470588235295, 0.27450980392156865, 0.1607843137254902],
               "Material": "CorrodedMetal",
               "TopSurface": "Smooth",
@@ -2827,7 +2827,7 @@
               "CanQuery": true,
               "CanTouch": false,
               "Size": [4, 3, 4],
-              "Position": [0, 1.975, 43],
+              "Position": [-100, 1.975, 99],
               "Color": [0.2784313725490196, 0.396078431372549, 0.5725490196078431],
               "Material": "CorrodedMetal",
               "TopSurface": "Smooth",
@@ -2854,9 +2854,9 @@
                 4
               ],
               "Position": [
-                -24,
+                -124,
                 1.975,
-                44
+                100
               ],
               "Color": [
                 0.611764705882353,
@@ -2888,9 +2888,9 @@
                 4
               ],
               "Position": [
-                0,
+                -100,
                 1.975,
-                48
+                104
               ],
               "Color": [
                 0.6901960784313725,
@@ -2922,9 +2922,9 @@
                 4
               ],
               "Position": [
-                24,
+                -76,
                 1.975,
-                44
+                100
               ],
               "Color": [
                 0.4392156862745098,
