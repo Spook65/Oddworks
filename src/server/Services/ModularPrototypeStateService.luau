@@ -298,6 +298,50 @@ function ModularPrototypeStateService.AddUnbankedComponent(
 	return true
 end
 
+-- Completed on-site activities may award directly to protected session storage.
+-- A complete validated copy is committed once so overflow or malformed state
+-- cannot leave a partially updated BankedComponents table.
+function ModularPrototypeStateService.AddBankedComponent(
+	player: Player,
+	componentId: string,
+	rarity: string,
+	count: number
+): boolean
+	local state = states[player]
+	if not state then
+		return false
+	end
+
+	if not isBoundedString(componentId, MAX_COMPONENT_ID_LENGTH)
+		or not Components.GetDefinition(componentId)
+		or not isBoundedString(rarity, MAX_RARITY_LENGTH)
+		or not Components.IsValidRarity(rarity)
+		or not isPositiveInteger(count)
+	then
+		return false
+	end
+
+	local candidateBanked = copyValidatedComponentCounts(state.BankedComponents)
+	if not candidateBanked then
+		return false
+	end
+
+	local rarityCounts = candidateBanked[componentId]
+	if not rarityCounts then
+		rarityCounts = {}
+		candidateBanked[componentId] = rarityCounts
+	end
+	local currentCount = rarityCounts[rarity] or 0
+	if count > MAX_COMPONENTS_PER_BUCKET - currentCount then
+		return false
+	end
+	rarityCounts[rarity] = currentCount + count
+
+	state.BankedComponents = candidateBanked
+	stateChangedEvent:Fire(player)
+	return true
+end
+
 -- Banking builds and validates a complete destination copy before committing
 -- either map. With no yields in this function, a repeated prompt cannot observe
 -- the same unbanked units midway through the transaction.

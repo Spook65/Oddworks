@@ -52,6 +52,9 @@
         },
         "FurnacePodStealConfirm": {
           "$className": "RemoteEvent"
+        },
+        "OddityContainmentState": {
+          "$className": "RemoteEvent"
         }
       },
       "Shared": {
@@ -2140,6 +2143,326 @@
               "Position": [-116, 0, 194.2],
               "Transparency": 1
             }
+          }
+        },
+        "OddityContainmentYard": {
+          "$className": "Model",
+          "YardFloor": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [76, 0.2, 94],
+              "Position": [112, 0.1, 175],
+              "Color": [0.1803921568627451, 0.2196078431372549, 0.22745098039215686],
+              "Material": "Concrete",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            }
+          },
+          "EntryPad": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [24, 0.3, 10],
+              "Position": [112, 0.2, 125],
+              "Color": [0.27058823529411763, 0.35294117647058826, 0.3568627450980392],
+              "Material": "DiamondPlate",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            }
+          },
+          "ApproachDeck": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [14, 0.25, 34],
+              "Position": [112, 0.16, 148],
+              "Color": [0.2196078431372549, 0.29411764705882354, 0.30196078431372547],
+              "Material": "DiamondPlate"
+            }
+          },
+          "InnerRouteDeck": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [12, 0.25, 36],
+              "Position": [100, 0.16, 178],
+              "Orientation": [0, -38, 0],
+              "Color": [0.27450980392156865, 0.4745098039215686, 0.43137254901960786],
+              "Material": "DiamondPlate"
+            }
+          },
+          "OuterRouteDeck": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [12, 0.25, 42],
+              "Position": [127, 0.16, 178],
+              "Orientation": [0, 35, 0],
+              "Color": [0.30980392156862746, 0.3803921568627451, 0.5215686274509804],
+              "Material": "DiamondPlate"
+            }
+          },
+          "ExitDeck": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [58, 0.25, 14],
+              "Position": [112, 0.16, 198],
+              "Color": [0.23137254901960785, 0.26666666666666666, 0.27450980392156865],
+              "Material": "DiamondPlate"
+            }
+          },
+          "StartConsole": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [4, 2.6, 4],
+              "Position": [112, 1.5, 128],
+              "Color": [0.2235294117647059, 0.6745098039215687, 0.6313725490196078],
+              "Material": "Metal",
+              "TopSurface": "Smooth",
+              "BottomSurface": "Smooth"
+            },
+            "Prompt": {
+              "$className": "ProximityPrompt",
+              "$properties": {
+                "ActionText": "START CONTAINMENT",
+                "ObjectText": "Sparkmite Yard",
+                "HoldDuration": 0,
+                "MaxActivationDistance": 9,
+                "RequiresLineOfSight": false
+              }
+            }
+          },
+          "LandmarkLeft": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [3, 13, 3],
+              "Position": [87, 6.5, 132],
+              "Color": [0.23137254901960785, 0.6509803921568628, 0.611764705882353],
+              "Material": "Neon"
+            }
+          },
+          "LandmarkRight": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [3, 13, 3],
+              "Position": [137, 6.5, 132],
+              "Color": [0.23137254901960785, 0.6509803921568628, 0.611764705882353],
+              "Material": "Neon"
+            }
+          },
+          "CageBase": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [16, 0.4, 16],
+              "Position": [86, 0.25, 205],
+              "Color": [0.2784313725490196, 0.4470588235294118, 0.4],
+              "Material": "DiamondPlate"
+            }
+          },
+          "CageBack": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [16, 7, 0.6],
+              "Position": [86, 3.5, 212.7],
+              "Color": [0.24313725490196078, 0.6745098039215687, 0.5803921568627451],
+              "Material": "Metal"
+            }
+          },
+          "CageLeft": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [0.6, 7, 16],
+              "Position": [78.3, 3.5, 205],
+              "Color": [0.24313725490196078, 0.6745098039215687, 0.5803921568627451],
+              "Material": "Metal"
+            }
+          },
+          "CageRight": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": true,
+              "CanQuery": true,
+              "CanTouch": false,
+              "Size": [0.6, 7, 16],
+              "Position": [93.7, 3.5, 205],
+              "Color": [0.24313725490196078, 0.6745098039215687, 0.5803921568627451],
+              "Material": "Metal"
+            }
+          },
+          "ContainmentVolume": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CanQuery": false,
+              "CanTouch": false,
+              "Size": [12, 6, 12],
+              "Position": [86, 3, 205],
+              "Transparency": 1
+            }
+          },
+          "EscapeBeacon": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CanQuery": false,
+              "CanTouch": false,
+              "Size": [3, 9, 3],
+              "Position": [138, 4.5, 205],
+              "Color": [0.8862745098039215, 0.24705882352941178, 0.17647058823529413],
+              "Material": "Neon",
+              "Transparency": 0.25
+            }
+          },
+          "EscapeVolume": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CanQuery": false,
+              "CanTouch": false,
+              "Size": [12, 6, 12],
+              "Position": [138, 3, 205],
+              "Transparency": 1
+            }
+          },
+          "GateA": {
+            "$className": "Model",
+            "Control": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": true,
+                "CanQuery": true,
+                "CanTouch": false,
+                "Size": [3, 2.6, 3],
+                "Position": [102, 1.5, 158],
+                "Color": [0.2980392156862745, 0.8352941176470589, 0.5607843137254902],
+                "Material": "Metal"
+              },
+              "Prompt": {
+                "$className": "ProximityPrompt",
+                "$properties": {
+                  "ActionText": "CLOSE GATE A",
+                  "ObjectText": "DIVERSION GATE A",
+                  "HoldDuration": 0,
+                  "MaxActivationDistance": 8,
+                  "RequiresLineOfSight": false,
+                  "Enabled": false
+                }
+              }
+            },
+            "Barrier": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": true,
+                "CanQuery": true,
+                "CanTouch": false,
+                "Size": [2, 5, 10],
+                "Position": [121, 2.5, 169],
+                "Color": [0.9215686274509803, 0.3215686274509804, 0.20392156862745098],
+                "Material": "Metal"
+              }
+            }
+          },
+          "GateB": {
+            "$className": "Model",
+            "Control": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": true,
+                "CanQuery": true,
+                "CanTouch": false,
+                "Size": [3, 2.6, 3],
+                "Position": [119, 1.5, 190],
+                "Color": [0.2980392156862745, 0.8352941176470589, 0.5607843137254902],
+                "Material": "Metal"
+              },
+              "Prompt": {
+                "$className": "ProximityPrompt",
+                "$properties": {
+                  "ActionText": "CLOSE GATE B",
+                  "ObjectText": "CONTAINMENT GATE B",
+                  "HoldDuration": 0,
+                  "MaxActivationDistance": 8,
+                  "RequiresLineOfSight": false,
+                  "Enabled": false
+                }
+              }
+            },
+            "Barrier": {
+              "$className": "Part",
+              "$properties": {
+                "Anchored": true,
+                "CanCollide": true,
+                "CanQuery": true,
+                "CanTouch": false,
+                "Size": [10, 5, 2],
+                "Position": [105, 2.5, 196],
+                "Color": [0.9215686274509803, 0.3215686274509804, 0.20392156862745098],
+                "Material": "Metal"
+              }
+            }
+          },
+          "Waypoints": {
+            "$className": "Folder",
+            "Spawn": { "$className": "Part", "$properties": { "Anchored": true, "CanCollide": false, "CanQuery": false, "CanTouch": false, "Size": [0.2, 0.2, 0.2], "Position": [112, 1.6, 140], "Transparency": 1 } },
+            "SouthRun": { "$className": "Part", "$properties": { "Anchored": true, "CanCollide": false, "CanQuery": false, "CanTouch": false, "Size": [0.2, 0.2, 0.2], "Position": [112, 1.6, 152], "Transparency": 1 } },
+            "BranchA": { "$className": "Part", "$properties": { "Anchored": true, "CanCollide": false, "CanQuery": false, "CanTouch": false, "Size": [0.2, 0.2, 0.2], "Position": [112, 1.6, 164], "Transparency": 1 } },
+            "InnerCross": { "$className": "Part", "$properties": { "Anchored": true, "CanCollide": false, "CanQuery": false, "CanTouch": false, "Size": [0.2, 0.2, 0.2], "Position": [98, 1.6, 178], "Transparency": 1 } },
+            "OuterRun": { "$className": "Part", "$properties": { "Anchored": true, "CanCollide": false, "CanQuery": false, "CanTouch": false, "Size": [0.2, 0.2, 0.2], "Position": [130, 1.6, 178], "Transparency": 1 } },
+            "BranchB": { "$className": "Part", "$properties": { "Anchored": true, "CanCollide": false, "CanQuery": false, "CanTouch": false, "Size": [0.2, 0.2, 0.2], "Position": [112, 1.6, 192], "Transparency": 1 } },
+            "CageEntry": { "$className": "Part", "$properties": { "Anchored": true, "CanCollide": false, "CanQuery": false, "CanTouch": false, "Size": [0.2, 0.2, 0.2], "Position": [96, 1.6, 200], "Transparency": 1 } },
+            "Cage": { "$className": "Part", "$properties": { "Anchored": true, "CanCollide": false, "CanQuery": false, "CanTouch": false, "Size": [0.2, 0.2, 0.2], "Position": [86, 1.6, 205], "Transparency": 1 } },
+            "Escape": { "$className": "Part", "$properties": { "Anchored": true, "CanCollide": false, "CanQuery": false, "CanTouch": false, "Size": [0.2, 0.2, 0.2], "Position": [138, 1.6, 205], "Transparency": 1 } }
           }
         },
         "WorkshopPlots": {

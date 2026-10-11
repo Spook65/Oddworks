@@ -161,6 +161,13 @@ end
 
 local FurnacePodChaseService = require(furnacePodChaseServiceModule)
 
+local oddityContainmentServiceModule = Services:WaitForChild("OddityContainmentService")
+if not oddityContainmentServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.OddityContainmentService must be a ModuleScript.")
+end
+
+local OddityContainmentService = require(oddityContainmentServiceModule)
+
 local devHarnessServiceModule = Services:WaitForChild("DevHarnessService")
 if not devHarnessServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.DevHarnessService must be a ModuleScript.")
@@ -223,6 +230,7 @@ PrototypeAssemblyService.Start()
 PrototypeConstructRuntimeService.Start()
 SignatureDiscoveryService.Start()
 FurnacePodChaseService.Start()
+OddityContainmentService.Start()
 SalvageService.Start()
 OuterYardSalvageService.Start()
 DeepBayService.Start()
