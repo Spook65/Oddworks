@@ -5,14 +5,20 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Services = script.Parent
+local ServerRoot = assert(Services.Parent, "[ODDWORKS][DevInspector] Services folder must have a parent.")
+local Config = ServerRoot:WaitForChild("Config")
 local ConstructCapabilityResolver = require(Services:WaitForChild("ConstructCapabilityResolver"))
 local FurnacePodChaseService = require(Services:WaitForChild("FurnacePodChaseService"))
+local KineticPodRecoveryService = require(Services:WaitForChild("KineticPodRecoveryService"))
 local ModularPrototypeStateService = require(Services:WaitForChild("ModularPrototypeStateService"))
+local OddlingDisplayService = require(Services:WaitForChild("OddlingDisplayService"))
 local PersistenceService = require(Services:WaitForChild("PersistenceService"))
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
 local PrototypeConstructRuntimeService = require(Services:WaitForChild("PrototypeConstructRuntimeService"))
 local SignatureDiscoveryService = require(Services:WaitForChild("SignatureDiscoveryService"))
 local WorkshopService = require(Services:WaitForChild("WorkshopService"))
+local Oddlings = require(Config:WaitForChild("Oddlings"))
+local WorkshopLevels = require(Config:WaitForChild("WorkshopLevels"))
 
 type SpeedOverride = {
 	Humanoid: Humanoid,
@@ -126,6 +132,19 @@ local function summarizeComponents(componentCounts: ModularPrototypeStateService
 	return string.format("Total %d: %s%s", total, table.concat(visible, "; "), suffix)
 end
 
+local function summarizeOddlings(counts: { [string]: number }): (string, number)
+	local entries: { string } = {}
+	local total = 0
+	for speciesId, count in pairs(counts) do
+		if count > 0 then
+			total += count
+			table.insert(entries, string.format("%s x%d", speciesId, count))
+		end
+	end
+	table.sort(entries)
+	return if #entries > 0 then table.concat(entries, "; ") else "Empty", total
+end
+
 local function buildSnapshot(player: Player, actionMessage: string?, actionSucceeded: boolean?): { [string]: any }?
 	if not isDevelopmentContext(player) then
 		return nil
@@ -136,6 +155,7 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 	local humanoid = getLiveHumanoid(player)
 	local construct = if modularState then modularState.PrototypeConstruct else nil
 	local chase = FurnacePodChaseService.GetDiagnosticSnapshot(player)
+	local kinetic = KineticPodRecoveryService.GetDiagnosticSnapshot(player)
 	local constructRuntime = PrototypeConstructRuntimeService.GetDiagnosticSnapshot(player)
 	local signatureRuntime = SignatureDiscoveryService.GetDiagnosticSnapshot(player)
 	local persistenceStatus = PersistenceService.GetStatus(player)
@@ -154,6 +174,26 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 	local expectedWalkSpeed = chase.ExpectedSpringLegsWalkSpeed
 	if expectedWalkSpeed == nil and hasSpringLegs and baselineWalkSpeed ~= nil then
 		expectedWalkSpeed = baselineWalkSpeed * chase.ConfiguredSpringLegsMultiplier
+	end
+
+	local ownedSummary = "Unavailable"
+	local ownedCount = 0
+	local displayedSummary = "Unavailable"
+	local displayedCount = 0
+	local displayCapacity = 0
+	local hypePerMinute = 0
+	if playerState then
+		ownedSummary, ownedCount = summarizeOddlings(playerState.OwnedOddlings)
+		local displayed = OddlingDisplayService.GetDisplayedCounts(player)
+		displayedSummary, displayedCount = summarizeOddlings(displayed)
+		local levelDefinition = WorkshopLevels.GetDefinition(playerState.WorkshopLevel)
+		displayCapacity = if levelDefinition then levelDefinition.DisplayCapacity else 0
+		for speciesId, count in pairs(displayed) do
+			local oddlingDefinition = Oddlings.GetDefinition(speciesId)
+			if oddlingDefinition then
+				hypePerMinute += count * oddlingDefinition.HypePerInterval * (60 / oddlingDefinition.HypeIntervalSeconds)
+			end
+		end
 	end
 
 	local constructView: { [string]: string }? = nil
@@ -191,6 +231,7 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 		SpringLegsEligible = chase.SpringLegsEligible,
 		ChasePhase = chase.Phase,
 		ChaseAttemptGeneration = chase.AttemptGeneration,
+		FurnaceCooldownRemaining = chase.CooldownRemaining,
 		IsCarrier = chase.IsCarrier,
 		WardenStage = chase.WardenStage,
 		CarryRuntimePresent = chase.CarryRuntimePresent,
@@ -202,9 +243,19 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 		KilnbackDiscovered = signatureRuntime.Discovered,
 		KilnbackRuntimePresent = signatureRuntime.RuntimePresent,
 		KilnbackRuntimeCount = signatureRuntime.RuntimeCount,
+		KineticPhase = kinetic.Phase,
+		KineticAttemptGeneration = kinetic.AttemptGeneration,
+		KineticIsCarrier = kinetic.IsCarrier,
+		KineticCooldownRemaining = kinetic.CooldownRemaining,
 		Scrap = if playerState then playerState.Scrap else nil,
 		Hype = if playerState then playerState.Hype else nil,
 		WorkshopLevel = if playerState then playerState.WorkshopLevel else nil,
+		OwnedOddlingsSummary = ownedSummary,
+		OwnedOddlingsCount = ownedCount,
+		DisplayedOddlingsSummary = displayedSummary,
+		DisplayedOddlingsCount = displayedCount,
+		DisplayCapacity = displayCapacity,
+		HypePerMinute = hypePerMinute,
 		BankedSummary = if modularState then summarizeComponents(modularState.BankedComponents) else "Unavailable",
 		UnbankedSummary = if modularState then summarizeComponents(modularState.UnbankedComponents) else "Unavailable",
 		DevWalkSpeedOverride = speedOverride ~= nil,

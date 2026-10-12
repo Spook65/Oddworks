@@ -1,6 +1,7 @@
 --!strict
 
 export type OddityContainmentDefinition = {
+	Enabled: boolean,
 	WorldModelName: string,
 	StartConsoleName: string,
 	GateModelNames: { [string]: string },
@@ -23,6 +24,7 @@ export type OddityContainmentDefinition = {
 local OddityContainmentConfig = {}
 
 local definition: OddityContainmentDefinition = {
+	Enabled = false,
 	WorldModelName = "OddityContainmentYard",
 	StartConsoleName = "StartConsole",
 	GateModelNames = {

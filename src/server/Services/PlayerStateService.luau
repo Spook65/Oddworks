@@ -506,25 +506,26 @@ end
 
 -- Records owned Oddlings as species counters for the current simple MVP shape.
 -- Duplicates are intentional: each successful Toastmarshal craft increments the same counter.
+function PlayerStateService.CanAddOwnedOddling(player: Player, speciesId: string, amount: number): boolean
+	local state = playerStates[player]
+	if not state
+		or not isBoundedIdentifier(speciesId, MAX_OWNED_ODDLING_ID_LENGTH)
+		or not Oddlings.GetDefinition(speciesId)
+		or not isPositiveFiniteInteger(amount)
+	then
+		return false
+	end
+
+	return canAddWithoutOverflow(state.OwnedOddlings[speciesId] or 0, amount)
+end
+
 function PlayerStateService.AddOwnedOddling(player: Player, speciesId: string, amount: number): boolean
 	local state = playerStates[player]
-	if not state then
-		return false
-	end
-
-	if not isBoundedIdentifier(speciesId, MAX_OWNED_ODDLING_ID_LENGTH) or not Oddlings.GetDefinition(speciesId) then
-		return false
-	end
-
-	if not isPositiveFiniteInteger(amount) then
+	if not state or not PlayerStateService.CanAddOwnedOddling(player, speciesId, amount) then
 		return false
 	end
 
 	local currentCount = state.OwnedOddlings[speciesId] or 0
-	if not canAddWithoutOverflow(currentCount, amount) then
-		return false
-	end
-
 	state.OwnedOddlings[speciesId] = currentCount + amount
 	notifyStateChanged(player)
 	return true

@@ -154,12 +154,26 @@ end
 
 local SignatureDiscoveryService = require(signatureDiscoveryServiceModule)
 
+local recoveryCarrierRegistryModule = Services:WaitForChild("RecoveryCarrierRegistry")
+if not recoveryCarrierRegistryModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.RecoveryCarrierRegistry must be a ModuleScript.")
+end
+
+local RecoveryCarrierRegistry = require(recoveryCarrierRegistryModule)
+
 local furnacePodChaseServiceModule = Services:WaitForChild("FurnacePodChaseService")
 if not furnacePodChaseServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.FurnacePodChaseService must be a ModuleScript.")
 end
 
 local FurnacePodChaseService = require(furnacePodChaseServiceModule)
+
+local kineticPodRecoveryServiceModule = Services:WaitForChild("KineticPodRecoveryService")
+if not kineticPodRecoveryServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.KineticPodRecoveryService must be a ModuleScript.")
+end
+
+local KineticPodRecoveryService = require(kineticPodRecoveryServiceModule)
 
 local oddityContainmentServiceModule = Services:WaitForChild("OddityContainmentService")
 if not oddityContainmentServiceModule:IsA("ModuleScript") then
@@ -229,7 +243,9 @@ WorkshopBankingService.Start()
 PrototypeAssemblyService.Start()
 PrototypeConstructRuntimeService.Start()
 SignatureDiscoveryService.Start()
+RecoveryCarrierRegistry.Start()
 FurnacePodChaseService.Start()
+KineticPodRecoveryService.Start()
 OddityContainmentService.Start()
 SalvageService.Start()
 OuterYardSalvageService.Start()

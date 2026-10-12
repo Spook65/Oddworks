@@ -210,9 +210,11 @@ local function getInstalledSelection(construct: PrototypeConstruct?, slot: strin
 end
 
 local function formatOption(option: AvailableSelection): string
-	local availability = string.format("banked x%d", option.BankedCount)
+	local availability = string.format("AVAILABLE / BANKED x%d", option.BankedCount)
 	if option.IsInstalled then
-		availability = if option.BankedCount > 0 then availability .. " + installed" else "installed"
+		availability = if option.BankedCount > 0
+			then string.format("CURRENTLY INSTALLED | BANKED x%d", option.BankedCount)
+			else "CURRENTLY INSTALLED"
 	end
 	local summary = string.format("%s [%s] - %s", option.DisplayName, option.Rarity, availability)
 	local description = COMPONENT_DESCRIPTIONS[option.ComponentId]
@@ -231,7 +233,13 @@ local function refreshButton(slot: string)
 		return
 	end
 	local selected = getSelectedOption(slot)
-	button.Text = if selected then formatOption(selected) else "No available component"
+	local selectionHeading = if latestSnapshot and latestSnapshot.PrototypeConstruct
+		then "SELECTED FOR REBUILD"
+		else "SELECTED FOR ASSEMBLY"
+	button.Text = if selected then selectionHeading .. "\n" .. formatOption(selected) else "No available component"
+	button.BackgroundColor3 = if selected and not selected.IsInstalled
+		then Color3.fromRGB(58, 91, 78)
+		else Color3.fromRGB(61, 68, 64)
 	button.Active = selected ~= nil
 	button.AutoButtonColor = selected ~= nil
 end
@@ -345,7 +353,7 @@ local function createInterface()
 	assemblyPanel.Name = "AssemblyPanel"
 	assemblyPanel.AnchorPoint = Vector2.new(0.5, 0.5)
 	assemblyPanel.Position = UDim2.fromScale(0.5, 0.5)
-	assemblyPanel.Size = UDim2.new(0.9, 0, 0, 430)
+	assemblyPanel.Size = UDim2.new(0.9, 0, 0, 485)
 	assemblyPanel.BackgroundColor3 = Color3.fromRGB(31, 34, 33)
 	assemblyPanel.BackgroundTransparency = 0.03
 	assemblyPanel.BorderSizePixel = 0
@@ -354,8 +362,8 @@ local function createInterface()
 	panel = assemblyPanel
 
 	local sizeConstraint = Instance.new("UISizeConstraint")
-	sizeConstraint.MinSize = Vector2.new(300, 430)
-	sizeConstraint.MaxSize = Vector2.new(520, 430)
+	sizeConstraint.MinSize = Vector2.new(300, 485)
+	sizeConstraint.MaxSize = Vector2.new(520, 485)
 	sizeConstraint.Parent = assemblyPanel
 
 	local title = Instance.new("TextLabel")
@@ -403,10 +411,10 @@ local function createInterface()
 
 	local roleLabels = { Head = "HEAD", Arm = "ARMS", Legs = "LEGS" }
 	for index, slot in ipairs(SLOT_ORDER) do
-		local y = 160 + (index - 1) * 55
+		local y = 160 + (index - 1) * 66
 		local roleLabel = Instance.new("TextLabel")
 		roleLabel.Position = UDim2.fromOffset(20, y)
-		roleLabel.Size = UDim2.fromOffset(65, 42)
+		roleLabel.Size = UDim2.fromOffset(65, 56)
 		roleLabel.BackgroundTransparency = 1
 		roleLabel.Font = Enum.Font.GothamBold
 		roleLabel.Text = roleLabels[slot]
@@ -418,13 +426,13 @@ local function createInterface()
 		local optionButton = Instance.new("TextButton")
 		optionButton.Name = slot .. "SelectionButton"
 		optionButton.Position = UDim2.new(0, 88, 0, y)
-		optionButton.Size = UDim2.new(1, -108, 0, 42)
+		optionButton.Size = UDim2.new(1, -108, 0, 56)
 		optionButton.BackgroundColor3 = Color3.fromRGB(61, 68, 64)
 		optionButton.BorderSizePixel = 0
 		optionButton.Font = Enum.Font.Gotham
 		optionButton.Text = "No available component"
 		optionButton.TextColor3 = Color3.fromRGB(245, 238, 214)
-		optionButton.TextSize = 14
+		optionButton.TextSize = 13
 		optionButton.TextWrapped = true
 		optionButton.Parent = assemblyPanel
 		selectionButtons[slot] = optionButton
@@ -440,8 +448,8 @@ local function createInterface()
 
 	local resultLabel = Instance.new("TextLabel")
 	resultLabel.Name = "AssemblyFeedbackLabel"
-	resultLabel.Position = UDim2.fromOffset(20, 328)
-	resultLabel.Size = UDim2.new(1, -40, 0, 30)
+	resultLabel.Position = UDim2.fromOffset(20, 365)
+	resultLabel.Size = UDim2.new(1, -40, 0, 48)
 	resultLabel.BackgroundTransparency = 1
 	resultLabel.Font = Enum.Font.Gotham
 	resultLabel.Text = ""
@@ -454,7 +462,7 @@ local function createInterface()
 	local submitButton = Instance.new("TextButton")
 	submitButton.Name = "AssembleButton"
 	submitButton.AnchorPoint = Vector2.new(0.5, 0)
-	submitButton.Position = UDim2.new(0.5, 0, 0, 370)
+	submitButton.Position = UDim2.new(0.5, 0, 0, 425)
 	submitButton.Size = UDim2.fromOffset(220, 44)
 	submitButton.BackgroundColor3 = Color3.fromRGB(184, 91, 53)
 	submitButton.BorderSizePixel = 0
@@ -534,7 +542,12 @@ function AssemblyController.Start()
 		end
 
 		if resultCode == "ASSEMBLY_SUCCESS" and (mode == "ASSEMBLED" or mode == "REBUILT") then
-			showFeedback(if mode == "ASSEMBLED" then "Prototype Construct assembled." else "Prototype Construct rebuilt.", true)
+			local selectedLegs = getSelectedOption("Legs")
+			if selectedLegs and selectedLegs.ComponentId == "SpringLegs" then
+				showFeedback("SPRINGLEGS INSTALLED - Chase mobility boost ready for recovery escapes.", true)
+			else
+				showFeedback(if mode == "ASSEMBLED" then "Prototype Construct assembled." else "Prototype Construct rebuilt.", true)
+			end
 		elseif resultCode == "INSUFFICIENT_COMPONENTS" then
 			showFeedback("One or more selected components are unavailable.", false)
 		elseif resultCode == "INCOMPATIBLE_COMPONENT" or resultCode == "INVALID_COMPONENT" or resultCode == "INVALID_FRAME" then

@@ -22,6 +22,7 @@ export type FurnacePodChaseDefinition = {
 	StageTwoSeconds: number,
 	StageSpeeds: { number },
 	ResetSeconds: number,
+	SuccessCooldownSeconds: number,
 	RevealDelaySeconds: number,
 }
 
@@ -49,6 +50,7 @@ local definition: FurnacePodChaseDefinition = {
 	StageTwoSeconds = 5,
 	StageSpeeds = { 10.5, 14.5, 18.0 },
 	ResetSeconds = 2,
+	SuccessCooldownSeconds = 40,
 	RevealDelaySeconds = 2,
 }
 

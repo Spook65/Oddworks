@@ -2,6 +2,7 @@
 
 export type OddlingDefinition = {
 	SpeciesId: string,
+	TemplateFolderName: string,
 	TemplateName: string,
 	RootPartName: string,
 	AnchorAllParts: boolean,
@@ -17,6 +18,7 @@ local Oddlings = {}
 local definitions: { [string]: OddlingDefinition } = {
 	Toastmarshal = {
 		SpeciesId = "Toastmarshal",
+		TemplateFolderName = "Oddlings",
 		TemplateName = "Toastmarshal_Common",
 		RootPartName = "RootPart",
 		AnchorAllParts = false,
@@ -28,11 +30,32 @@ local definitions: { [string]: OddlingDefinition } = {
 	-- rate validates multi-species gameplay without implying final art or balance.
 	Conejurer = {
 		SpeciesId = "Conejurer",
+		TemplateFolderName = "Oddlings",
 		TemplateName = "Conejurer_Prototype",
 		RootPartName = "HumanoidRootPart",
 		AnchorAllParts = true,
 		IdleAnimationAssetId = nil,
 		HypePerInterval = 2,
+		HypeIntervalSeconds = 10,
+	},
+	Voltlet = {
+		SpeciesId = "Voltlet",
+		TemplateFolderName = "Oddlings",
+		TemplateName = "Voltlet_Prototype",
+		RootPartName = "RootPart",
+		AnchorAllParts = true,
+		IdleAnimationAssetId = nil,
+		HypePerInterval = 1,
+		HypeIntervalSeconds = 10,
+	},
+	Kilnback = {
+		SpeciesId = "Kilnback",
+		TemplateFolderName = "Signatures",
+		TemplateName = "Kilnback_Prototype",
+		RootPartName = "RootPart",
+		AnchorAllParts = true,
+		IdleAnimationAssetId = nil,
+		HypePerInterval = 3,
 		HypeIntervalSeconds = 10,
 	},
 }
@@ -41,6 +64,7 @@ local definitions: { [string]: OddlingDefinition } = {
 local function copyDefinition(definition: OddlingDefinition): OddlingDefinition
 	return {
 		SpeciesId = definition.SpeciesId,
+		TemplateFolderName = definition.TemplateFolderName,
 		TemplateName = definition.TemplateName,
 		RootPartName = definition.RootPartName,
 		AnchorAllParts = definition.AnchorAllParts,

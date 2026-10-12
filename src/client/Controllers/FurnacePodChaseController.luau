@@ -504,15 +504,19 @@ local function readPayload(payload: any): (string?, number?, string?, number?, V
 		end
 		return kind, payload.Stage, nil, nil, nil, nil
 	elseif kind == "REVEALED" then
-		if payload.SignatureId ~= "Kilnback" then
+		if payload.SignatureId ~= "Kilnback"
+			or typeof(payload.OwnedCount) ~= "number"
+			or payload.OwnedCount < 1
+			or payload.OwnedCount % 1 ~= 0
+		then
 			return nil, nil, nil, nil, nil, nil
 		end
 		for key in pairs(payload) do
-			if key ~= "Kind" and key ~= "SignatureId" then
+			if key ~= "Kind" and key ~= "SignatureId" and key ~= "OwnedCount" then
 				return nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, nil, payload.SignatureId, nil, nil, nil
+		return kind, nil, string.format("%s  |  OWNED x%d", payload.SignatureId, payload.OwnedCount), nil, nil, nil
 	elseif kind == "CAUGHT" or kind == "SECURED" or kind == "CANCELLED" then
 		for key in pairs(payload) do
 			if key ~= "Kind" then
@@ -538,7 +542,7 @@ function FurnacePodChaseController.Start()
 		clearChasePresentation()
 	end)
 	stateRemote.OnClientEvent:Connect(function(payload: any)
-		local kind, stage, _, headStartSeconds, destinationPosition, springLegsActive = readPayload(payload)
+		local kind, stage, revealText, headStartSeconds, destinationPosition, springLegsActive = readPayload(payload)
 		if not kind then
 			return
 		end
@@ -584,7 +588,7 @@ function FurnacePodChaseController.Start()
 		elseif kind == "REVEALED" then
 			hideSpringLegsActive()
 			clearObjectiveCue()
-			showMessage("ODDITY REVEALED\nKILNBACK", Color3.fromRGB(255, 174, 48), 4, false)
+			showMessage("ODDITY REVEALED\n" .. string.upper(revealText :: string), Color3.fromRGB(255, 174, 48), 4, false)
 		elseif kind == "CANCELLED" then
 			clearChasePresentation()
 		end

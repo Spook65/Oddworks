@@ -10,7 +10,9 @@ local Config = ServerRoot:WaitForChild("Config")
 local ConstructCapabilityResolver = require(Services:WaitForChild("ConstructCapabilityResolver"))
 local FurnacePodChaseConfig = require(Config:WaitForChild("FurnacePodChaseConfig"))
 local ModularPrototypeStateService = require(Services:WaitForChild("ModularPrototypeStateService"))
+local OddlingDisplayService = require(Services:WaitForChild("OddlingDisplayService"))
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
+local RecoveryCarrierRegistry = require(Services:WaitForChild("RecoveryCarrierRegistry"))
 local SignatureDiscoveryService = require(Services:WaitForChild("SignatureDiscoveryService"))
 local WorkshopService = require(Services:WaitForChild("WorkshopService"))
 
@@ -28,6 +30,7 @@ type ChaseRuntime = {
 	Prompt: ProximityPrompt,
 	WardenSpawnMarker: BasePart,
 	TargetPresentation: { [BasePart]: PartPresentation },
+	AvailabilityLabel: TextLabel,
 }
 type MovementOverride = {
 	Player: Player,
@@ -49,12 +52,14 @@ export type DiagnosticSnapshot = {
 	MovementBaselineWalkSpeed: number?,
 	ExpectedSpringLegsWalkSpeed: number?,
 	ConfiguredSpringLegsMultiplier: number,
+	CooldownRemaining: number,
 }
 
 local FurnacePodChaseService = {}
 
 local RUNTIME_ROOT_NAME = "ODDWORKSRuntime"
 local RUNTIME_FOLDER_NAME = "FurnacePodChase"
+local RECOVERY_ACTIVITY_ID = "FURNACE_POD"
 
 local state: ChaseState = "AVAILABLE"
 local carrier: Player? = nil
@@ -75,6 +80,7 @@ local runtimeFolder: Folder? = nil
 local runtime: ChaseRuntime? = nil
 local definition: Definition? = nil
 local stateRemote: RemoteEvent? = nil
+local cooldownEndsAt = 0
 local started = false
 
 local function requireChildOfClass(parent: Instance, childName: string, expectedClassName: string): Instance
@@ -141,6 +147,7 @@ local function validateDefinition(candidate: Definition)
 		or not isPositiveFinite(candidate.StageSpeeds[2])
 		or not isPositiveFinite(candidate.StageSpeeds[3])
 		or not isPositiveFinite(candidate.ResetSeconds)
+		or not isPositiveFinite(candidate.SuccessCooldownSeconds)
 		or not isPositiveFinite(candidate.RevealDelaySeconds)
 	then
 		error("[ODDWORKS][FurnacePodChase] Chase configuration is invalid.")
@@ -246,6 +253,13 @@ local function setTargetAvailable(isAvailable: boolean)
 		end
 	end
 	chaseRuntime.Prompt.Enabled = isAvailable
+end
+
+local function setAvailabilityText(status: string)
+	local chaseRuntime = runtime
+	if chaseRuntime then
+		chaseRuntime.AvailabilityLabel.Text = string.format("FURNACE POD\nHIGH SECURITY - %s", status)
+	end
 end
 
 local function disconnectActiveDeath()
@@ -475,13 +489,26 @@ local function returnToWorkshop(player: Player)
 	end
 end
 
-local function scheduleReset(resetToken: number, candidate: Definition)
-	task.delay(candidate.ResetSeconds, function()
+local function scheduleReset(resetToken: number, delaySeconds: number)
+	cooldownEndsAt = os.clock() + delaySeconds
+	task.spawn(function()
+		while generation == resetToken and state == "RESETTING" do
+			local remaining = math.max(0, math.ceil(cooldownEndsAt - os.clock()))
+			setAvailabilityText(string.format("RECHARGING %ds", remaining))
+			if remaining <= 0 then
+				break
+			end
+			task.wait(1)
+		end
+	end)
+	task.delay(delaySeconds, function()
 		if generation ~= resetToken or state ~= "RESETTING" then
 			return
 		end
+		cooldownEndsAt = 0
 		state = "AVAILABLE"
 		setTargetAvailable(true)
+		setAvailabilityText("AVAILABLE")
 		print("[ODDWORKS][FurnacePodChase] Furnace Pod reset and is available again.")
 	end)
 end
@@ -497,6 +524,8 @@ local function failAttempt(player: Player, attemptToken: number, shouldReturnToW
 	generation += 1
 	local resetToken = generation
 	state = "RESETTING"
+	setAvailabilityText("RESETTING")
+	RecoveryCarrierRegistry.Release(player, RECOVERY_ACTIVITY_ID)
 	carrier = nil
 	restoreChaseMovement(player)
 	disconnectActiveDeath()
@@ -509,7 +538,7 @@ local function failAttempt(player: Player, attemptToken: number, shouldReturnToW
 	end
 	local candidate = definition
 	if candidate then
-		scheduleReset(resetToken, candidate)
+		scheduleReset(resetToken, candidate.ResetSeconds)
 	end
 end
 
@@ -580,15 +609,38 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 			return
 		end
 
-		if not SignatureDiscoveryService.RevealKilnbackFromFurnacePod(player) then
-			warn(string.format("[ODDWORKS][FurnacePodChase] Kilnback reveal failed for %s; resetting attempt.", player.Name))
-			cancelAttempt(player, attemptToken, "REVEAL_FAILED")
+		if not OddlingDisplayService.HasRuntimeTemplate("Kilnback")
+			or not SignatureDiscoveryService.CanRevealKilnbackFromFurnacePod(player)
+			or not PlayerStateService.CanAddOwnedOddling(player, "Kilnback", 1)
+		then
+			warn(string.format("[ODDWORKS][FurnacePodChase] Kilnback reward preflight failed for %s.", player.Name))
+			cancelAttempt(player, attemptToken, "REWARD_FAILED")
+			return
+		end
+		if not PlayerStateService.AddOwnedOddling(player, "Kilnback", 1) then
+			warn(string.format("[ODDWORKS][FurnacePodChase] Kilnback ownership commit failed for %s.", player.Name))
+			cancelAttempt(player, attemptToken, "REWARD_FAILED")
 			return
 		end
 
+		if not SignatureDiscoveryService.RevealKilnbackFromFurnacePod(player) then
+			-- Ownership has already committed and remains authoritative. Presentation
+			-- failure must not reopen the attempt and duplicate the persistent reward.
+			warn(string.format("[ODDWORKS][FurnacePodChase] Kilnback presentation failed after ownership commit for %s.", player.Name))
+		end
+
 		disconnectActiveDeath()
+		RecoveryCarrierRegistry.Release(player, RECOVERY_ACTIVITY_ID)
 		carrier = nil
-		fireCarrier(player, { Kind = "REVEALED", SignatureId = "Kilnback" })
+		local updatedState = PlayerStateService.GetSnapshot(player)
+		local ownedCount = if updatedState then updatedState.OwnedOddlings.Kilnback or 0 else 0
+		fireCarrier(player, { Kind = "REVEALED", SignatureId = "Kilnback", OwnedCount = ownedCount })
+		generation += 1
+		local resetToken = generation
+		state = "RESETTING"
+		setAvailabilityText(string.format("RECHARGING %ds", math.ceil(candidate.SuccessCooldownSeconds)))
+		scheduleReset(resetToken, candidate.SuccessCooldownSeconds)
+		print(string.format("[ODDWORKS][FurnacePodChase] %s recovered Kilnback x%d.", player.Name, ownedCount))
 	end)
 end
 
@@ -662,6 +714,7 @@ local function validateAttemptContext(
 	if player.Parent ~= Players
 		or state ~= "AVAILABLE"
 		or carrier ~= nil
+		or RecoveryCarrierRegistry.GetActiveActivity(player) ~= nil
 		or not PlayerStateService.HasState(player)
 		or not ModularPrototypeStateService.HasState(player)
 		or not WorkshopService.GetAssignedPlot(player)
@@ -692,11 +745,15 @@ local function beginAttempt(
 	secureZone: BasePart
 )
 	pendingConfirmations[player] = nil
+	if not RecoveryCarrierRegistry.TryAcquire(player, RECOVERY_ACTIVITY_ID) then
+		return
+	end
 	generation += 1
 	local attemptToken = generation
 	state = "STOLEN"
 	carrier = player
 	setTargetAvailable(false)
+	setAvailabilityText("IN RECOVERY")
 	destroyAttemptModels()
 
 	carryModel = createCarry(player, root)
@@ -815,6 +872,7 @@ local function clearPlayer(player: Player)
 		end
 	else
 		restoreChaseMovement(player)
+		RecoveryCarrierRegistry.Release(player, RECOVERY_ACTIVITY_ID)
 	end
 end
 
@@ -906,6 +964,34 @@ local function createRouteSign(routeModel: Model, marker: BasePart, name: string
 	addSignFace(sign, Enum.NormalId.Back, text)
 end
 
+local function createAvailabilityLabel(marker: BasePart): TextLabel
+	local previous = marker:FindFirstChild("FurnaceAvailabilityLabel")
+	if previous then
+		previous:Destroy()
+	end
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "FurnaceAvailabilityLabel"
+	billboard.Adornee = marker
+	billboard.AlwaysOnTop = false
+	billboard.MaxDistance = 90
+	billboard.Size = UDim2.fromOffset(180, 52)
+	billboard.StudsOffsetWorldSpace = Vector3.new(0, 4.5, 0)
+	billboard.Parent = marker
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundColor3 = Color3.fromRGB(48, 31, 22)
+	label.BackgroundTransparency = 0.14
+	label.BorderSizePixel = 0
+	label.Font = Enum.Font.GothamBold
+	label.Text = "FURNACE POD\nHIGH SECURITY - AVAILABLE"
+	label.TextColor3 = Color3.fromRGB(255, 151, 78)
+	label.TextSize = 13
+	label.TextWrapped = true
+	label.Parent = billboard
+	return label
+end
+
 local function discoverRuntime(candidate: Definition): ChaseRuntime
 	local world = requireChildOfClass(Workspace, "ODDWORKSWorld", "Folder")
 	local routeModel = requireChildOfClass(world, candidate.RouteModelName, "Model") :: Model
@@ -949,6 +1035,7 @@ local function discoverRuntime(candidate: Definition): ChaseRuntime
 	local interactionPart = requireChildOfClass(targetModel, candidate.InteractionPartName, "BasePart") :: BasePart
 	local prompt = requireChildOfClass(interactionPart, "Prompt", "ProximityPrompt") :: ProximityPrompt
 	local wardenSpawnMarker = requireChildOfClass(targetModel, candidate.WardenSpawnMarkerName, "BasePart") :: BasePart
+	local availabilityLabel = createAvailabilityLabel(interactionPart)
 	local presentation: { [BasePart]: PartPresentation } = {}
 	for _, descendant in ipairs(targetModel:GetDescendants()) do
 		if descendant:IsA("BasePart") and descendant ~= wardenSpawnMarker then
@@ -966,6 +1053,7 @@ local function discoverRuntime(candidate: Definition): ChaseRuntime
 		Prompt = prompt,
 		WardenSpawnMarker = wardenSpawnMarker,
 		TargetPresentation = presentation,
+		AvailabilityLabel = availabilityLabel,
 	}
 end
 
@@ -1004,6 +1092,7 @@ function FurnacePodChaseService.GetDiagnosticSnapshot(player: Player): Diagnosti
 		MovementBaselineWalkSpeed = if playerMovement then playerMovement.BaselineWalkSpeed else nil,
 		ExpectedSpringLegsWalkSpeed = if playerMovement then playerMovement.AppliedWalkSpeed else nil,
 		ConfiguredSpringLegsMultiplier = candidate.SpringLegsSpeedMultiplier,
+		CooldownRemaining = if state == "RESETTING" then math.max(0, cooldownEndsAt - os.clock()) else 0,
 	}
 end
 
@@ -1029,6 +1118,7 @@ function FurnacePodChaseService.Start()
 	end
 
 	setTargetAvailable(true)
+	setAvailabilityText("AVAILABLE")
 	local chaseRuntime = runtime :: ChaseRuntime
 	chaseRuntime.Prompt.Triggered:Connect(handlePromptTriggered)
 	ModularPrototypeStateService.ObserveStateChanged(handleModularStateChanged)

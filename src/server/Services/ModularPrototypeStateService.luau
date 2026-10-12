@@ -301,6 +301,32 @@ end
 -- Completed on-site activities may award directly to protected session storage.
 -- A complete validated copy is committed once so overflow or malformed state
 -- cannot leave a partially updated BankedComponents table.
+function ModularPrototypeStateService.CanAddBankedComponent(
+	player: Player,
+	componentId: string,
+	rarity: string,
+	count: number
+): boolean
+	local state = states[player]
+	if not state
+		or not isBoundedString(componentId, MAX_COMPONENT_ID_LENGTH)
+		or not Components.GetDefinition(componentId)
+		or not isBoundedString(rarity, MAX_RARITY_LENGTH)
+		or not Components.IsValidRarity(rarity)
+		or not isPositiveInteger(count)
+	then
+		return false
+	end
+
+	local candidateBanked = copyValidatedComponentCounts(state.BankedComponents)
+	if not candidateBanked then
+		return false
+	end
+	local rarityCounts = candidateBanked[componentId]
+	local currentCount = if rarityCounts then rarityCounts[rarity] or 0 else 0
+	return count <= MAX_COMPONENTS_PER_BUCKET - currentCount
+end
+
 function ModularPrototypeStateService.AddBankedComponent(
 	player: Player,
 	componentId: string,

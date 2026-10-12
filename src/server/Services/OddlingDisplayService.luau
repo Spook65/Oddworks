@@ -25,6 +25,7 @@ local WorkshopLevels = require(workshopLevelsModule)
 
 type OddlingDefinition = {
 	SpeciesId: string,
+	TemplateFolderName: string,
 	TemplateName: string,
 	RootPartName: string,
 	AnchorAllParts: boolean,
@@ -146,7 +147,11 @@ end
 -- Validates the minimum contract for either an animated production rig or a
 -- static prototype without silently repairing artistic hierarchy.
 local function validateTemplate(candidate: Instance, definition: OddlingDefinition): Model?
-	local templatePath = string.format("ServerStorage.ODDWORKSAssets.Oddlings.%s", definition.TemplateName)
+	local templatePath = string.format(
+		"ServerStorage.ODDWORKSAssets.%s.%s",
+		definition.TemplateFolderName,
+		definition.TemplateName
+	)
 	if not candidate:IsA("Model") then
 		warn(string.format("[ODDWORKS][OddlingDisplay] %s must be a Model.", templatePath))
 		return nil
@@ -202,8 +207,8 @@ local function discoverTemplate(speciesId: string): Model?
 	end
 
 	local assets = ServerStorage:FindFirstChild("ODDWORKSAssets")
-	local oddlings = if assets then assets:FindFirstChild("Oddlings") else nil
-	local candidate = if oddlings then oddlings:FindFirstChild(definition.TemplateName) else nil
+	local templates = if assets then assets:FindFirstChild(definition.TemplateFolderName) else nil
+	local candidate = if templates then templates:FindFirstChild(definition.TemplateName) else nil
 	local cached = cachedTemplates[speciesId]
 	if cached and candidate == cached then
 		return cached
@@ -214,7 +219,8 @@ local function discoverTemplate(speciesId: string): Model?
 		if not missingTemplateWarnings[speciesId] then
 			warn(
 				string.format(
-					"[ODDWORKS][OddlingDisplay] Missing runtime template: ServerStorage.ODDWORKSAssets.Oddlings.%s",
+						"[ODDWORKS][OddlingDisplay] Missing runtime template: ServerStorage.ODDWORKSAssets.%s.%s",
+						definition.TemplateFolderName,
 					definition.TemplateName
 				)
 			)
@@ -559,6 +565,35 @@ local function spawnDisplay(
 		return nil
 	end
 
+	local rootPart = clone:FindFirstChild(definition.RootPartName, true)
+	if rootPart and rootPart:IsA("BasePart") then
+		local billboard = Instance.new("BillboardGui")
+		billboard.Name = "ProductionLabel"
+		billboard.Adornee = rootPart
+		billboard.AlwaysOnTop = false
+		billboard.MaxDistance = 48
+		billboard.Size = UDim2.fromOffset(150, 40)
+		billboard.StudsOffsetWorldSpace = Vector3.new(0, clone:GetExtentsSize().Y + 0.45, 0)
+		billboard.Parent = rootPart
+
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundColor3 = Color3.fromRGB(23, 30, 30)
+		label.BackgroundTransparency = 0.16
+		label.BorderSizePixel = 0
+		label.Font = Enum.Font.GothamBold
+		label.Text = string.format(
+			"%s\n+%d HYPE / %ds",
+			string.upper(definition.SpeciesId),
+			definition.HypePerInterval,
+			definition.HypeIntervalSeconds
+		)
+		label.TextColor3 = Color3.fromRGB(218, 246, 225)
+		label.TextSize = 12
+		label.TextWrapped = true
+		label.Parent = billboard
+	end
+
 	startIdleAnimation(clone, definition)
 	return clone
 end
@@ -780,18 +815,22 @@ function OddlingDisplayService.Start()
 	-- Runtime template removal/restoration is presentation failure only. Re-running
 	-- normal reconciliation lets existing ownership disappear/recover visually.
 	local assets = ServerStorage:FindFirstChild("ODDWORKSAssets")
-	local templatesFolder = if assets then assets:FindFirstChild("Oddlings") else nil
-	if templatesFolder then
-		templatesFolder.ChildAdded:Connect(function()
-			for _, player in ipairs(Players:GetPlayers()) do
-				queueReconcile(player)
-			end
-		end)
-		templatesFolder.ChildRemoved:Connect(function()
-			for _, player in ipairs(Players:GetPlayers()) do
-				queueReconcile(player)
-			end
-		end)
+	local watchedFolders: { [Instance]: boolean } = {}
+	for _, definition in ipairs(Oddlings.GetAllDefinitions()) do
+		local templatesFolder = if assets then assets:FindFirstChild(definition.TemplateFolderName) else nil
+		if templatesFolder and not watchedFolders[templatesFolder] then
+			watchedFolders[templatesFolder] = true
+			templatesFolder.ChildAdded:Connect(function()
+				for _, player in ipairs(Players:GetPlayers()) do
+					queueReconcile(player)
+				end
+			end)
+			templatesFolder.ChildRemoved:Connect(function()
+				for _, player in ipairs(Players:GetPlayers()) do
+					queueReconcile(player)
+				end
+			end)
+		end
 	end
 
 	for _, definition in ipairs(Oddlings.GetAllDefinitions()) do

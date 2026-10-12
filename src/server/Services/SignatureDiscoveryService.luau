@@ -292,6 +292,12 @@ function SignatureDiscoveryService.Reconcile(player: Player): boolean
 		destroyRuntime(player)
 		return true
 	end
+	-- Furnace rewards now use persistent OwnedOddlings and the generic Workshop
+	-- display reconciler. Keep this legacy session runtime only for signal discovery.
+	if discoverySources[player] == "FURNACE_POD" then
+		destroyRuntime(player)
+		return true
+	end
 
 	local marker = getRevealMarker(player, opportunity, candidate)
 	local template = getTemplate(candidate)
@@ -387,20 +393,23 @@ end
 -- This server-only entry point lets another validated server gameplay flow use
 -- the existing session discovery and derived Kilnback runtime. It deliberately
 -- does not relax the SignalScanner requirement on the public world prompt.
+function SignatureDiscoveryService.CanRevealKilnbackFromFurnacePod(player: Player): boolean
+	return started
+		and player.Parent == Players
+		and PlayerStateService.HasState(player)
+		and ModularPrototypeStateService.HasState(player)
+		and WorkshopService.GetAssignedPlot(player) ~= nil
+end
+
 function SignatureDiscoveryService.RevealKilnbackFromFurnacePod(player: Player): boolean
-	if not started
-		or player.Parent ~= Players
-		or not PlayerStateService.HasState(player)
-		or not ModularPrototypeStateService.HasState(player)
-		or not WorkshopService.GetAssignedPlot(player)
-	then
+	if not SignatureDiscoveryService.CanRevealKilnbackFromFurnacePod(player) then
 		return false
 	end
 
 	discoveries[player] = true
 	discoverySources[player] = "FURNACE_POD"
-	-- The chase controller owns the reveal banner. STATE updates the existing
-	-- scanner presentation without firing its separate discovery celebration.
+	-- The chase controller owns the reveal banner. Generic OwnedOddlings display
+	-- reconciliation owns the physical Workshop representation.
 	sendState(player, "STATE")
 	queueReconcile(player)
 	print(string.format("[ODDWORKS][SignatureDiscovery] %s revealed Kilnback from a secured Furnace Pod.", player.Name))

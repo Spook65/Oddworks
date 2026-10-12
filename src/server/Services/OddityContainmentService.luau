@@ -634,6 +634,15 @@ function OddityContainmentService.Start()
 	started = true
 
 	local candidate = OddityContainmentConfig.GetDefinition()
+	if not candidate.Enabled then
+		local world = Workspace:FindFirstChild("ODDWORKSWorld")
+		local parkedYard = if world then world:FindFirstChild(candidate.WorldModelName) else nil
+		if parkedYard then
+			parkedYard:Destroy()
+		end
+		print("[ODDWORKS][OddityContainment] Prototype parked; eastern containment activity is disabled.")
+		return
+	end
 	validateDefinition(candidate)
 	definition = candidate
 	runtime = discoverRuntime(candidate)
