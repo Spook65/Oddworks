@@ -11,6 +11,7 @@ local ConstructCapabilityResolver = require(Services:WaitForChild("ConstructCapa
 local FurnacePodChaseService = require(Services:WaitForChild("FurnacePodChaseService"))
 local KineticPodRecoveryService = require(Services:WaitForChild("KineticPodRecoveryService"))
 local ModularPrototypeStateService = require(Services:WaitForChild("ModularPrototypeStateService"))
+local OddlingCollectionService = require(Services:WaitForChild("OddlingCollectionService"))
 local OddlingDisplayService = require(Services:WaitForChild("OddlingDisplayService"))
 local PersistenceService = require(Services:WaitForChild("PersistenceService"))
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
@@ -145,6 +146,20 @@ local function summarizeOddlings(counts: { [string]: number }): (string, number)
 	return if #entries > 0 then table.concat(entries, "; ") else "Empty", total
 end
 
+local function summarizeDisplayLoadout(collectionSnapshot: { [string]: any }?): string
+	if not collectionSnapshot or typeof(collectionSnapshot.Slots) ~= "table" then
+		return "Unavailable"
+	end
+	local entries: { string } = {}
+	for _, slot in ipairs(collectionSnapshot.Slots) do
+		if typeof(slot) == "table" and slot.Unlocked == true and typeof(slot.SlotIndex) == "number" then
+			local speciesId = if typeof(slot.SpeciesId) == "string" then slot.SpeciesId else "Empty"
+			table.insert(entries, string.format("%d:%s", slot.SlotIndex, speciesId))
+		end
+	end
+	return if #entries > 0 then table.concat(entries, "; ") else "Empty"
+end
+
 local function buildSnapshot(player: Player, actionMessage: string?, actionSucceeded: boolean?): { [string]: any }?
 	if not isDevelopmentContext(player) then
 		return nil
@@ -181,6 +196,8 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 	local displayedSummary = "Unavailable"
 	local displayedCount = 0
 	local displayCapacity = 0
+	local collectionOnlyCount = 0
+	local displayLoadoutSummary = "Unavailable"
 	local hypePerMinute = 0
 	if playerState then
 		ownedSummary, ownedCount = summarizeOddlings(playerState.OwnedOddlings)
@@ -188,6 +205,11 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 		displayedSummary, displayedCount = summarizeOddlings(displayed)
 		local levelDefinition = WorkshopLevels.GetDefinition(playerState.WorkshopLevel)
 		displayCapacity = if levelDefinition then levelDefinition.DisplayCapacity else 0
+		local collectionSnapshot = OddlingCollectionService.GetCollectionSnapshot(player)
+		if collectionSnapshot then
+			collectionOnlyCount = collectionSnapshot.CollectionOnlyCount
+			displayLoadoutSummary = summarizeDisplayLoadout(collectionSnapshot)
+		end
 		for speciesId, count in pairs(displayed) do
 			local oddlingDefinition = Oddlings.GetDefinition(speciesId)
 			if oddlingDefinition then
@@ -255,6 +277,8 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 		DisplayedOddlingsSummary = displayedSummary,
 		DisplayedOddlingsCount = displayedCount,
 		DisplayCapacity = displayCapacity,
+		DisplayLoadoutSummary = displayLoadoutSummary,
+		CollectionOnlyCount = collectionOnlyCount,
 		HypePerMinute = hypePerMinute,
 		BankedSummary = if modularState then summarizeComponents(modularState.BankedComponents) else "Unavailable",
 		UnbankedSummary = if modularState then summarizeComponents(modularState.UnbankedComponents) else "Unavailable",

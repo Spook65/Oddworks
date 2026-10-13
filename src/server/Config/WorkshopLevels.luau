@@ -42,4 +42,12 @@ function WorkshopLevels.GetDefinition(level: number): WorkshopLevelDefinition?
 	}
 end
 
+function WorkshopLevels.GetMaxDisplayCapacity(): number
+	local maximum = 0
+	for _, definition in pairs(definitions) do
+		maximum = math.max(maximum, definition.DisplayCapacity)
+	end
+	return maximum
+end
+
 return WorkshopLevels

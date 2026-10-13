@@ -58,6 +58,18 @@
         },
         "OddityContainmentState": {
           "$className": "RemoteEvent"
+        },
+        "OddlingCollectionRequest": {
+          "$className": "RemoteEvent"
+        },
+        "OddlingCollectionSnapshot": {
+          "$className": "RemoteEvent"
+        },
+        "OddlingDisplayEditRequest": {
+          "$className": "RemoteEvent"
+        },
+        "OddlingCollectionFeedback": {
+          "$className": "RemoteEvent"
         }
       },
       "Shared": {

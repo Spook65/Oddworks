@@ -7,6 +7,7 @@ local Workspace = game:GetService("Workspace")
 local Services = script.Parent
 local ServerRoot = assert(Services.Parent, "[ODDWORKS][OddlingDisplay] Services folder must have a parent.")
 local Config = ServerRoot:WaitForChild("Config")
+local OddlingCollectionService = require(Services:WaitForChild("OddlingCollectionService"))
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
 local WorkshopService = require(Services:WaitForChild("WorkshopService"))
 
@@ -464,46 +465,26 @@ local function cleanupPlayerDisplays(player: Player)
 	end
 end
 
--- Round-robin allocation gives every owned/configured species one slot before
--- duplicates. Sorted configuration order makes mixed workshops reproducible.
-local function buildDisplayAllocation(ownedOddlings: { [string]: number }, capacity: number): { DisplayAllocation }
-	local definitions = Oddlings.GetAllDefinitions()
-	local remaining: { [string]: number } = {}
+-- Converts the authoritative session loadout into stable physical allocations.
+-- Empty slots remain empty; no production-value sorting or automatic replacement occurs here.
+local function buildDisplayAllocations(
+	loadout: OddlingCollectionService.DisplayLoadout,
+	capacity: number
+): { [number]: DisplayAllocation }
+	local allocations: { [number]: DisplayAllocation } = {}
 	local speciesDisplayIndexes: { [string]: number } = {}
-	local allocations: { DisplayAllocation } = {}
-
-	for _, definition in ipairs(definitions) do
-		local ownedCount = ownedOddlings[definition.SpeciesId] or 0
-		if ownedCount > 0 and discoverTemplate(definition.SpeciesId) then
-			remaining[definition.SpeciesId] = ownedCount
-			speciesDisplayIndexes[definition.SpeciesId] = 0
+	for slotIndex = 1, capacity do
+		local speciesId = loadout[slotIndex]
+		if speciesId and discoverTemplate(speciesId) then
+			local displayIndex = (speciesDisplayIndexes[speciesId] or 0) + 1
+			speciesDisplayIndexes[speciesId] = displayIndex
+			allocations[slotIndex] = {
+				SlotIndex = slotIndex,
+				SpeciesId = speciesId,
+				SpeciesDisplayIndex = displayIndex,
+			}
 		end
 	end
-
-	while #allocations < capacity do
-		local assignedThisRound = false
-
-		for _, definition in ipairs(definitions) do
-			local speciesId = definition.SpeciesId
-			local remainingCount = remaining[speciesId] or 0
-			if remainingCount > 0 and #allocations < capacity then
-				local speciesDisplayIndex = (speciesDisplayIndexes[speciesId] or 0) + 1
-				speciesDisplayIndexes[speciesId] = speciesDisplayIndex
-				remaining[speciesId] = remainingCount - 1
-				table.insert(allocations, {
-					SlotIndex = #allocations + 1,
-					SpeciesId = speciesId,
-					SpeciesDisplayIndex = speciesDisplayIndex,
-				})
-				assignedThisRound = true
-			end
-		end
-
-		if not assignedThisRound then
-			break
-		end
-	end
-
 	return allocations
 end
 
@@ -528,6 +509,83 @@ local function collectExistingDisplays(container: Folder): { [number]: Model }
 	end
 
 	return displaysBySlot
+end
+
+local function updatePedestals(
+	container: Folder,
+	plot: BasePart,
+	slots: { DisplaySlot },
+	capacity: number,
+	allocations: { [number]: DisplayAllocation }
+)
+	for slotIndex, slot in ipairs(slots) do
+		local pedestalName = string.format("DisplayPedestal_%02d", slotIndex)
+		local existing = container:FindFirstChild(pedestalName)
+		local pedestal: Part
+		if existing and existing:IsA("Part") then
+			pedestal = existing
+		else
+			if existing then
+				existing:Destroy()
+			end
+			pedestal = Instance.new("Part")
+			pedestal.Name = pedestalName
+			pedestal.Anchored = true
+			pedestal.CanCollide = false
+			pedestal.CanQuery = false
+			pedestal.CanTouch = false
+			pedestal.Size = Vector3.new(4.8, 0.3, 4.2)
+			pedestal.TopSurface = Enum.SurfaceType.Smooth
+			pedestal.BottomSurface = Enum.SurfaceType.Smooth
+			pedestal.Parent = container
+		end
+		pedestal.CFrame = slot.WorldCFrame * CFrame.new(0, -0.15, 0)
+		pedestal:SetAttribute("DisplaySlotIndex", slotIndex)
+		pedestal:SetAttribute("OwnerUserId", container:GetAttribute("OwnerUserId"))
+
+		local unlocked = slotIndex <= capacity
+		local allocation = allocations[slotIndex]
+		local previousSpeciesId = pedestal:GetAttribute("DisplayedSpeciesId")
+		pedestal:SetAttribute("DisplayedSpeciesId", if allocation then allocation.SpeciesId else nil)
+		if not unlocked then
+			pedestal.Color = Color3.fromRGB(38, 42, 43)
+			pedestal.Material = Enum.Material.Metal
+			pedestal.Transparency = 0.62
+		elseif allocation then
+			pedestal.Color = plot.Color:Lerp(Color3.new(1, 1, 1), 0.22)
+			pedestal.Material = Enum.Material.Neon
+			pedestal.Transparency = 0.08
+		else
+			pedestal.Color = plot.Color:Lerp(Color3.fromRGB(37, 43, 45), 0.58)
+			pedestal.Material = Enum.Material.Metal
+			pedestal.Transparency = 0.18
+		end
+
+		local light = pedestal:FindFirstChild("OccupiedLight")
+		if not light or not light:IsA("PointLight") then
+			if light then
+				light:Destroy()
+			end
+			light = Instance.new("PointLight")
+			light.Name = "OccupiedLight"
+			light.Range = 9
+			light.Shadows = false
+			light.Parent = pedestal
+		end
+		local pointLight = light :: PointLight
+		pointLight.Color = plot.Color
+		pointLight.Enabled = unlocked and allocation ~= nil
+		pointLight.Brightness = if pointLight.Enabled then 1.2 else 0
+		if allocation and previousSpeciesId ~= allocation.SpeciesId then
+			local pulseSpeciesId = allocation.SpeciesId
+			pointLight.Brightness = 4
+			task.delay(0.7, function()
+				if pedestal.Parent ~= nil and pedestal:GetAttribute("DisplayedSpeciesId") == pulseSpeciesId then
+					pointLight.Brightness = 1.2
+				end
+			end)
+		end
+	end
 end
 
 -- Clones one configured template into an authoritative allocation. Spawn failure
@@ -635,28 +693,35 @@ local function reconcilePlayer(player: Player)
 
 	local slots = discoverDisplaySlots(plot, plotId)
 	local capacity = math.min(#slots, levelDefinition.DisplayCapacity)
-	local allocations = buildDisplayAllocation(snapshot.OwnedOddlings, capacity)
-	if #allocations == 0 then
+	local loadout = OddlingCollectionService.GetDisplayLoadout(player)
+	if not loadout then
 		cleanupPlayerDisplays(player)
-		capacityWarningKeys[player] = nil
 		return
 	end
+	local allocations = buildDisplayAllocations(loadout, capacity)
 
 	local container = getOrCreatePlayerContainer(player)
 	if not container then
 		return
 	end
+	updatePedestals(container, plot, slots, capacity, allocations)
 
 	local existingDisplays = collectExistingDisplays(container)
 	for slotIndex, display in pairs(existingDisplays) do
-		if slotIndex > #allocations then
+		if not allocations[slotIndex] then
 			display:Destroy()
 			existingDisplays[slotIndex] = nil
 		end
 	end
 
 	local spawnedCount = 0
-	for _, allocation in ipairs(allocations) do
+	local displayedCount = 0
+	for slotIndex = 1, capacity do
+		local allocation = allocations[slotIndex]
+		if not allocation then
+			continue
+		end
+		displayedCount += 1
 		local existing = existingDisplays[allocation.SlotIndex]
 		local reusable = existing
 			and existing:GetAttribute("OddlingSpeciesId") == allocation.SpeciesId
@@ -679,7 +744,7 @@ local function reconcilePlayer(player: Player)
 	for _, definition in ipairs(Oddlings.GetAllDefinitions()) do
 		totalOwnedConfigured += snapshot.OwnedOddlings[definition.SpeciesId] or 0
 	end
-	local warningKey = string.format("%d:%d:%d", totalOwnedConfigured, #allocations, capacity)
+	local warningKey = string.format("%d:%d:%d", totalOwnedConfigured, displayedCount, capacity)
 	if totalOwnedConfigured > capacity and capacityWarningKeys[player] ~= warningKey then
 		warn(
 			string.format(
@@ -719,30 +784,10 @@ function OddlingDisplayService.HasRuntimeTemplate(speciesId: string): boolean
 	return discoverTemplate(speciesId) ~= nil
 end
 
--- Returns a fresh species-count map derived from this service's current clones.
--- Callers can mutate the copy without changing display bookkeeping.
+-- Returns a fresh species-count map derived from the authoritative session
+-- loadout. Missing physical clones never suppress Hype or rewrite ownership.
 function OddlingDisplayService.GetDisplayedCounts(player: Player): { [string]: number }
-	local counts: { [string]: number } = {}
-	local displaysFolder = runtimeDisplaysFolder
-	if not displaysFolder then
-		return counts
-	end
-
-	local container = displaysFolder:FindFirstChild(getPlayerContainerName(player))
-	if not container or not container:IsA("Folder") then
-		return counts
-	end
-
-	for _, child in ipairs(container:GetChildren()) do
-		if child:IsA("Model") then
-			local speciesId = child:GetAttribute("OddlingSpeciesId")
-			if typeof(speciesId) == "string" and Oddlings.GetDefinition(speciesId) then
-				counts[speciesId] = (counts[speciesId] or 0) + 1
-			end
-		end
-	end
-
-	return counts
+	return OddlingCollectionService.GetDisplayedCounts(player)
 end
 
 -- Keeps the established narrow query for callers interested in one species.
@@ -837,7 +882,7 @@ function OddlingDisplayService.Start()
 		discoverTemplate(definition.SpeciesId)
 	end
 
-	PlayerStateService.ObserveStateChanged(function(player: Player)
+	OddlingCollectionService.ObserveLoadoutChanged(function(player: Player)
 		queueReconcile(player)
 	end)
 

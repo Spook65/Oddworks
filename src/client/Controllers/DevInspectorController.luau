@@ -139,6 +139,8 @@ local function renderSnapshot(payload: any)
 		string.format("Owned Total: %s", formatInteger(payload.OwnedOddlingsCount)),
 		string.format("Displayed: %s", formatString(payload.DisplayedOddlingsSummary)),
 		string.format("Display Slots: %s / %s", formatInteger(payload.DisplayedOddlingsCount), formatInteger(payload.DisplayCapacity)),
+		string.format("Display Loadout: %s", formatString(payload.DisplayLoadoutSummary)),
+		string.format("Collection Only: %s", formatInteger(payload.CollectionOnlyCount)),
 		string.format("Hype Production: %s / min", formatNumber(payload.HypePerMinute)),
 		string.format("Unbanked: %s", formatString(payload.UnbankedSummary)),
 		string.format("Banked: %s", formatString(payload.BankedSummary)),
