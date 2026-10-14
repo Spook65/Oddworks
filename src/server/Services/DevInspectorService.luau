@@ -8,6 +8,7 @@ local Services = script.Parent
 local ServerRoot = assert(Services.Parent, "[ODDWORKS][DevInspector] Services folder must have a parent.")
 local Config = ServerRoot:WaitForChild("Config")
 local ConstructCapabilityResolver = require(Services:WaitForChild("ConstructCapabilityResolver"))
+local FirstTimeExperienceService = require(Services:WaitForChild("FirstTimeExperienceService"))
 local FurnacePodChaseService = require(Services:WaitForChild("FurnacePodChaseService"))
 local KineticPodRecoveryService = require(Services:WaitForChild("KineticPodRecoveryService"))
 local ModularPrototypeStateService = require(Services:WaitForChild("ModularPrototypeStateService"))
@@ -173,6 +174,7 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 	local kinetic = KineticPodRecoveryService.GetDiagnosticSnapshot(player)
 	local constructRuntime = PrototypeConstructRuntimeService.GetDiagnosticSnapshot(player)
 	local signatureRuntime = SignatureDiscoveryService.GetDiagnosticSnapshot(player)
+	local ftue = FirstTimeExperienceService.GetDiagnosticSnapshot(player)
 	local persistenceStatus = PersistenceService.GetStatus(player)
 	local speedOverride = speedOverrides[player]
 	if speedOverride and speedOverride.Humanoid.Parent == nil then
@@ -269,6 +271,21 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 		KineticAttemptGeneration = kinetic.AttemptGeneration,
 		KineticIsCarrier = kinetic.IsCarrier,
 		KineticCooldownRemaining = kinetic.CooldownRemaining,
+		FTUEStage = ftue.Stage,
+		FTUEElapsedSessionSeconds = ftue.ElapsedSessionSeconds,
+		FTUEReturningPlayer = ftue.ReturningPlayer,
+		FTUEFirstKineticCompleted = ftue.FirstKineticCompleted,
+		FTUEFirstHypeExplanationSeen = ftue.FirstHypeExplanationSeen,
+		FTUESpringLegsGuidanceActive = ftue.SpringLegsGuidanceActive,
+		FTUESpringLegsInstalled = ftue.SpringLegsInstalled,
+		FTUEFirstObjectiveSeconds = ftue.FirstObjectiveSeconds,
+		FTUEFirstKineticInteractionSeconds = ftue.FirstKineticInteractionSeconds,
+		FTUEFirstKineticTheftSeconds = ftue.FirstKineticTheftSeconds,
+		FTUEFirstSecureSeconds = ftue.FirstSecureSeconds,
+		FTUEFirstVoltletRevealSeconds = ftue.FirstVoltletRevealSeconds,
+		FTUEFirstHypeExplanationSeconds = ftue.FirstHypeExplanationSeconds,
+		FTUEFirstAssemblerOpenSeconds = ftue.FirstAssemblerOpenSeconds,
+		FTUEFirstSpringLegsInstallSeconds = ftue.FirstSpringLegsInstallSeconds,
 		Scrap = if playerState then playerState.Scrap else nil,
 		Hype = if playerState then playerState.Hype else nil,
 		WorkshopLevel = if playerState then playerState.WorkshopLevel else nil,

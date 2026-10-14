@@ -119,6 +119,13 @@ end
 
 local OddlingCollectionService = require(oddlingCollectionServiceModule)
 
+local firstTimeExperienceServiceModule = Services:WaitForChild("FirstTimeExperienceService")
+if not firstTimeExperienceServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.FirstTimeExperienceService must be a ModuleScript.")
+end
+
+local FirstTimeExperienceService = require(firstTimeExperienceServiceModule)
+
 local hypeServiceModule = Services:WaitForChild("HypeService")
 if not hypeServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.HypeService must be a ModuleScript.")
@@ -243,6 +250,7 @@ ProgressionService.Start()
 StateReplicationService.Start()
 ModularPrototypeReplicationService.Start()
 WorkshopService.Start()
+FirstTimeExperienceService.Start()
 OddlingCollectionService.Start()
 OddlingDisplayService.Start()
 HypeService.Start()

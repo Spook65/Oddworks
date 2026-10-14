@@ -325,7 +325,8 @@ local function handlePlayerStateChanged(player: Player)
 	if ownershipChanged then
 		for _, definition in ipairs(Oddlings.GetAllDefinitions()) do
 			local speciesId = definition.SpeciesId
-			local addedCount = (playerState.OwnedOddlings[speciesId] or 0) - (previousOwned[speciesId] or 0)
+			local previousOwnedCount = previousOwned[speciesId] or 0
+			local addedCount = (playerState.OwnedOddlings[speciesId] or 0) - previousOwnedCount
 			if addedCount > 0 then
 				local autoDisplayedCount, firstSlot = autoFillNewOwnership(
 					candidate,
@@ -344,6 +345,7 @@ local function handlePlayerStateChanged(player: Player)
 					AutoDisplayedCount = autoDisplayedCount,
 					FirstSlotIndex = firstSlot,
 					DisplayFull = autoDisplayedCount < addedCount,
+					FirstOwnedCopy = previousOwnedCount == 0,
 				})
 			end
 		end

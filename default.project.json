@@ -56,6 +56,12 @@
         "KineticPodRecoveryState": {
           "$className": "RemoteEvent"
         },
+        "FirstTimeExperienceRequest": {
+          "$className": "RemoteEvent"
+        },
+        "FirstTimeExperienceState": {
+          "$className": "RemoteEvent"
+        },
         "OddityContainmentState": {
           "$className": "RemoteEvent"
         },
@@ -1852,6 +1858,11 @@
               0.55,
               -24
             ],
+            "Orientation": [
+              0,
+              -151.9,
+              0
+            ],
             "Color": [
               0.3137254901960784,
               0.8235294117647058,
@@ -1912,8 +1923,8 @@
               "CanCollide": false,
               "CanQuery": false,
               "CanTouch": false,
-              "Size": [0.8, 7, 0.8],
-              "Position": [85, 3.5, 142],
+              "Size": [1, 10, 1],
+              "Position": [85, 5, 142],
               "Color": [0.22745098039215686, 0.8823529411764706, 1],
               "Material": "Neon"
             }
@@ -1958,6 +1969,15 @@
               "Position": [85, 2.2, 133.38],
               "Color": [0.22745098039215686, 0.8823529411764706, 1],
               "Material": "Neon"
+            },
+            "BeaconLight": {
+              "$className": "PointLight",
+              "$properties": {
+                "Brightness": 2.2,
+                "Color": [0.22745098039215686, 0.8823529411764706, 1],
+                "Range": 18,
+                "Shadows": false
+              }
             }
           },
           "UpperBand": {

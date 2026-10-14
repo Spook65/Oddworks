@@ -407,16 +407,26 @@ local function handleFeedback(payload: any)
 		and isSpeciesId(payload.SpeciesId)
 		and isIntegerInRange(payload.AddedCount, 1, 1000)
 		and isIntegerInRange(payload.AutoDisplayedCount, 0, MAX_SLOTS)
+		and typeof(payload.FirstOwnedCopy) == "boolean"
 	then
-		local heading = string.format("NEW ODDLING\n%s +%d", string.upper(payload.SpeciesId), payload.AddedCount)
-		if payload.AutoDisplayedCount > 0 and isIntegerInRange(payload.FirstSlotIndex, 1, MAX_SLOTS) then
-			local outcome = string.format("\nDISPLAYED IN SLOT %d", payload.FirstSlotIndex)
-			if payload.DisplayFull == true then
-				outcome ..= "\nREMAINDER ADDED TO COLLECTION"
+		local function showOddlingAdded()
+			local heading = string.format("NEW ODDLING\n%s +%d", string.upper(payload.SpeciesId), payload.AddedCount)
+			if payload.AutoDisplayedCount > 0 and isIntegerInRange(payload.FirstSlotIndex, 1, MAX_SLOTS) then
+				local outcome = string.format("\nDISPLAYED IN SLOT %d", payload.FirstSlotIndex)
+				if payload.DisplayFull == true then
+					outcome ..= "\nREMAINDER ADDED TO COLLECTION"
+				end
+				showFeedback(heading .. outcome, true)
+			else
+				showFeedback(heading .. "\nADDED TO COLLECTION - DISPLAY FULL", true)
 			end
-			showFeedback(heading .. outcome, true)
+		end
+		-- The first Voltlet display confirmation follows the secure/reveal banner
+		-- instead of competing with it. Repeat recoveries retain immediate feedback.
+		if payload.SpeciesId == "Voltlet" and payload.FirstOwnedCopy == true then
+			task.delay(3.2, showOddlingAdded)
 		else
-			showFeedback(heading .. "\nADDED TO COLLECTION - DISPLAY FULL", true)
+			showOddlingAdded()
 		end
 	elseif payload.Kind == "DISPLAY_ASSIGNED"
 		and isSpeciesId(payload.SpeciesId)

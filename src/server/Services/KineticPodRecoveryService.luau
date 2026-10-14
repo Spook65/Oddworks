@@ -8,6 +8,7 @@ local Services = script.Parent
 local ServerRoot = assert(Services.Parent, "[ODDWORKS][KineticPodRecovery] Services folder must have a parent.")
 local Config = ServerRoot:WaitForChild("Config")
 local ConstructCapabilityResolver = require(Services:WaitForChild("ConstructCapabilityResolver"))
+local FirstTimeExperienceService = require(Services:WaitForChild("FirstTimeExperienceService"))
 local KineticPodRecoveryConfig = require(Config:WaitForChild("KineticPodRecoveryConfig"))
 local ModularPrototypeStateService = require(Services:WaitForChild("ModularPrototypeStateService"))
 local OddlingDisplayService = require(Services:WaitForChild("OddlingDisplayService"))
@@ -177,6 +178,11 @@ local function setTargetAvailable(isAvailable: boolean)
 			part.CanCollide = if isAvailable then presentation.CanCollide else false
 			part.CanQuery = if isAvailable then presentation.CanQuery else false
 			part.CanTouch = if isAvailable then presentation.CanTouch else false
+		end
+	end
+	for _, descendant in ipairs(recoveryRuntime.TargetModel:GetDescendants()) do
+		if descendant:IsA("Light") then
+			descendant.Enabled = isAvailable
 		end
 	end
 	recoveryRuntime.Prompt.Enabled = isAvailable
@@ -489,8 +495,11 @@ local function failAttempt(player: Player, attemptToken: number, shouldReturnToW
 	if shouldReturnToWorkshop then
 		returnToWorkshop(player)
 	end
-	firePlayer(player, { Kind = kind })
 	local candidate = definition
+	if candidate then
+		FirstTimeExperienceService.RecordKineticFailure(player, candidate.ResetSeconds)
+	end
+	firePlayer(player, { Kind = kind })
 	if candidate then
 		scheduleReset(resetToken, candidate.ResetSeconds)
 	end
@@ -507,7 +516,11 @@ end
 
 local function sendProgressGuidance(player: Player, force: boolean)
 	local candidate = definition
-	if not candidate or not springLegsBonusGranted[player] or player.Parent ~= Players then
+	if not candidate
+		or not springLegsBonusGranted[player]
+		or player.Parent ~= Players
+		or FirstTimeExperienceService.IsManaging(player)
+	then
 		return
 	end
 	local installed = ConstructCapabilityResolver.HasSpringLegsChaseCapability(player)
@@ -605,6 +618,7 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 	guidanceStates[player] = if installed then "FURNACE" else "EQUIP"
 	local updatedState = PlayerStateService.GetSnapshot(player)
 	local ownedCount = if updatedState then updatedState.OwnedOddlings[candidate.RewardSpeciesId] or 0 else 0
+	local ftueManaged = FirstTimeExperienceService.RecordKineticSecure(player)
 	firePlayer(player, {
 		Kind = "SECURED",
 		OddlingId = candidate.RewardSpeciesId,
@@ -615,6 +629,7 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 		Count = candidate.RewardCount,
 		NextStep = if installed then "FURNACE" else "EQUIP",
 		DestinationPosition = destination,
+		FTUEManaged = ftueManaged,
 	})
 	print(string.format(
 		"[ODDWORKS][KineticPodRecovery] %s secured the Kinetic Pod and recovered Voltlet x%d%s.",
@@ -732,6 +747,7 @@ local function beginAttempt(player: Player)
 	local attemptToken = generation
 	state = "ACTIVATING"
 	carrier = player
+	FirstTimeExperienceService.RecordKineticTheft(player)
 	setTargetAvailable(false)
 	setAvailabilityText("IN RECOVERY")
 	destroyAttemptModels()

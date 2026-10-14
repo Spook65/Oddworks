@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local Services = script.Parent
 local ServerRoot = assert(Services.Parent, "[ODDWORKS][HypeService] Services folder must have a parent.")
 local Config = ServerRoot:WaitForChild("Config")
+local FirstTimeExperienceService = require(Services:WaitForChild("FirstTimeExperienceService"))
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
 local OddlingDisplayService = require(Services:WaitForChild("OddlingDisplayService"))
 
@@ -110,6 +111,7 @@ local function evaluatePlayer(player: Player, now: number)
 	end
 
 	if PlayerStateService.AddHype(player, totalAward) then
+		FirstTimeExperienceService.RecordHypeProduced(player, totalAward)
 		print(
 			string.format(
 				"[ODDWORKS][HypeService] %s +%d Hype from displayed Oddlings (%s).",

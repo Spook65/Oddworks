@@ -8,6 +8,13 @@ local Workspace = game:GetService("Workspace")
 
 local KineticPodRecoveryController = {}
 
+type KineticGuidanceMode = "EDGE" | "WORLD" | "NEAR"
+
+local KINETIC_OBJECTIVE_TEXT = "RECOVER THE KINETIC POD"
+local KINETIC_NEAR_ENTER_DISTANCE = 10
+local KINETIC_NEAR_EXIT_DISTANCE = 13
+local KINETIC_MARKER_MAX_DISTANCE = 500
+
 local banner: TextLabel? = nil
 local objectiveTarget: Part? = nil
 local objectiveBillboard: BillboardGui? = nil
@@ -18,8 +25,11 @@ local objectiveEdgeText: TextLabel? = nil
 local objectiveConnection: RBXScriptConnection? = nil
 local objectiveDestination: Vector3? = nil
 local objectiveText = ""
+local objectiveIsFreshKinetic = false
+local kineticGuidanceMode: KineticGuidanceMode? = nil
 local savedProgressDestination: Vector3? = nil
 local savedProgressText: string? = nil
+local ftueRequestRemote: RemoteEvent? = nil
 local presentationToken = 0
 local started = false
 
@@ -122,9 +132,19 @@ local function clearObjective()
 	objectiveLabel = nil
 	objectiveDestination = nil
 	objectiveText = ""
+	objectiveIsFreshKinetic = false
+	kineticGuidanceMode = nil
 	if objectiveEdge then
 		objectiveEdge.Visible = false
 	end
+end
+
+local function isInsideViewportInset(viewportPoint: Vector3, viewportSize: Vector2, horizontal: number, top: number, bottom: number): boolean
+	return viewportPoint.Z > 0
+		and viewportPoint.X >= horizontal
+		and viewportPoint.X <= viewportSize.X - horizontal
+		and viewportPoint.Y >= top
+		and viewportPoint.Y <= viewportSize.Y - bottom
 end
 
 local function updateObjective()
@@ -139,6 +159,9 @@ local function updateObjective()
 		if edge then
 			edge.Visible = false
 		end
+		if objectiveBillboard then
+			objectiveBillboard.Enabled = false
+		end
 		return
 	end
 
@@ -147,19 +170,49 @@ local function updateObjective()
 	if objectiveLabel then
 		objectiveLabel.Text = displayText
 	end
-	if objectiveBillboard then
+	local viewportPoint, onScreen = camera:WorldToViewportPoint(destination)
+	local viewportSize = camera.ViewportSize
+	if objectiveIsFreshKinetic then
+		local mode = kineticGuidanceMode
+		if mode == "NEAR" then
+			if distance >= KINETIC_NEAR_EXIT_DISTANCE then
+				mode = nil
+			end
+		elseif distance <= KINETIC_NEAR_ENTER_DISTANCE then
+			mode = "NEAR"
+		end
+
+		if mode ~= "NEAR" then
+			local firmlyOnScreen = onScreen and isInsideViewportInset(viewportPoint, viewportSize, 120, 110, 80)
+			local remainsOnScreen = isInsideViewportInset(viewportPoint, viewportSize, 45, 55, 35)
+			if mode == "WORLD" then
+				mode = if remainsOnScreen then "WORLD" else "EDGE"
+			elseif mode == "EDGE" then
+				mode = if firmlyOnScreen then "WORLD" else "EDGE"
+			else
+				mode = if firmlyOnScreen then "WORLD" else "EDGE"
+			end
+		end
+
+		kineticGuidanceMode = mode
+		if objectiveBillboard then
+			objectiveBillboard.Enabled = mode == "WORLD"
+		end
+		edge.Visible = mode == "EDGE"
+		if mode ~= "EDGE" then
+			return
+		end
+	elseif objectiveBillboard then
 		objectiveBillboard.Enabled = distance > 9
 	end
 
-	local viewportPoint, onScreen = camera:WorldToViewportPoint(destination)
-	local viewportSize = camera.ViewportSize
 	local comfortablyVisible = onScreen
 		and viewportPoint.Z > 0
 		and viewportPoint.X >= 90
 		and viewportPoint.X <= viewportSize.X - 90
 		and viewportPoint.Y >= 100
 		and viewportPoint.Y <= viewportSize.Y - 70
-	if comfortablyVisible then
+	if not objectiveIsFreshKinetic and comfortablyVisible then
 		edge.Visible = false
 		return
 	end
@@ -190,6 +243,8 @@ end
 
 local function showObjective(destination: Vector3, text: string)
 	clearObjective()
+	local isFreshKinetic = text == KINETIC_OBJECTIVE_TEXT
+	objectiveIsFreshKinetic = isFreshKinetic
 	local target = Instance.new("Part")
 	target.Name = "LocalKineticObjective"
 	target.Anchored = true
@@ -198,15 +253,32 @@ local function showObjective(destination: Vector3, text: string)
 	target.CanTouch = false
 	target.Size = Vector3.new(0.2, 0.2, 0.2)
 	target.Transparency = 1
-	target.Position = destination + Vector3.new(0, 2.8, 0)
+	target.Position = destination + Vector3.new(0, if isFreshKinetic then 7.5 else 2.8, 0)
 	target.Parent = Workspace
 	objectiveTarget = target
+	local objectiveColor = if string.find(text, "FURNACE", 1, true)
+		then Color3.fromRGB(255, 183, 62)
+		elseif string.find(text, "SPRINGLEGS", 1, true)
+		then Color3.fromRGB(117, 255, 178)
+		else Color3.fromRGB(108, 232, 255)
+	local light = Instance.new("PointLight")
+	light.Name = "ObjectivePulse"
+	light.Color = objectiveColor
+	light.Brightness = 0.8
+	light.Range = 13
+	light.Shadows = false
+	light.Parent = target
+	TweenService:Create(
+		light,
+		TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		{ Brightness = 2.2 }
+	):Play()
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "KineticObjectiveLabel"
 	billboard.Adornee = target
 	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 140
+	billboard.MaxDistance = if isFreshKinetic then KINETIC_MARKER_MAX_DISTANCE else 140
 	billboard.Size = UDim2.fromOffset(185, 48)
 	billboard.Parent = target
 	objectiveBillboard = billboard
@@ -217,13 +289,19 @@ local function showObjective(destination: Vector3, text: string)
 	label.BackgroundTransparency = 0.1
 	label.BorderSizePixel = 0
 	label.Font = Enum.Font.GothamBold
-	label.TextColor3 = Color3.fromRGB(108, 232, 255)
+	label.TextColor3 = objectiveColor
 	label.TextSize = 13
 	label.TextWrapped = true
 	label.Parent = billboard
 	objectiveLabel = label
 	objectiveDestination = destination
 	objectiveText = text
+	if objectiveEdgeArrow then
+		objectiveEdgeArrow.TextColor3 = objectiveColor
+	end
+	if objectiveEdgeText then
+		objectiveEdgeText.TextColor3 = objectiveColor
+	end
 	objectiveConnection = RunService.RenderStepped:Connect(updateObjective)
 	updateObjective()
 end
@@ -297,6 +375,7 @@ local function readPayload(payload: any): { [string]: any }?
 			or payload.ComponentId ~= "SpringLegs"
 			or payload.Rarity ~= "Common"
 			or payload.Count ~= 1
+			or typeof(payload.FTUEManaged) ~= "boolean"
 			or (payload.NextStep ~= "EQUIP" and payload.NextStep ~= "FURNACE")
 			or not isFiniteVector3(payload.DestinationPosition)
 		then
@@ -341,7 +420,7 @@ local function handleKineticState(payload: any)
 		)
 	elseif kind == "CAUGHT" then
 		clearObjective()
-		showMessage("CAUGHT - KINETIC POD LOST\nBANKED INVENTORY IS SAFE", Color3.fromRGB(255, 104, 82), 2.4)
+		showMessage("POD LOST\nTHE SCOUT WARDEN CAUGHT YOU\nTRY AGAIN", Color3.fromRGB(255, 104, 82), 2.4)
 	elseif kind == "CANCELLED" then
 		clearObjective()
 		showMessage("KINETIC RECOVERY CANCELLED", Color3.fromRGB(224, 155, 122), 1.8)
@@ -350,6 +429,16 @@ local function handleKineticState(payload: any)
 		showMessage("RECOVERY COULD NOT COMPLETE\nTRY AGAIN", Color3.fromRGB(255, 104, 82), 2.4)
 	elseif kind == "SECURED" then
 		clearObjective()
+		if validated.FTUEManaged then
+			showMessage("POD SECURED", Color3.fromRGB(117, 255, 178), 1.1)
+			local token = presentationToken
+			task.delay(1.2, function()
+				if presentationToken == token then
+					showMessage("VOLTLET RECOVERED", Color3.fromRGB(108, 232, 255), 1.8)
+				end
+			end)
+			return
+		end
 		local rewardText = string.format("KINETIC POD SECURED\nVOLTLET DISCOVERED  |  OWNED x%d", validated.OwnedCount)
 		if validated.SpringLegsBonusGranted then
 			rewardText ..= "\nFIRST RECOVERY BONUS: SPRINGLEGS"
@@ -377,6 +466,64 @@ local function handleKineticState(payload: any)
 	end
 end
 
+local function readFTUEPayload(payload: any): { [string]: any }?
+	if typeof(payload) ~= "table" or typeof(payload.Kind) ~= "string" then
+		return nil
+	end
+	local kind = payload.Kind
+	if kind == "KINETIC_OBJECTIVE" or kind == "SPRINGLEGS_GUIDANCE" or kind == "ADVANCED_GUIDANCE" then
+		if not isFiniteVector3(payload.DestinationPosition) then
+			return nil
+		end
+	elseif kind == "FIRST_HYPE" then
+		if typeof(payload.Amount) ~= "number"
+			or payload.Amount % 1 ~= 0
+			or payload.Amount < 1
+			or payload.Amount > 1000000
+		then
+			return nil
+		end
+	elseif kind ~= "SPRINGLEGS_INSTALLED" then
+		return nil
+	end
+	return payload
+end
+
+local function handleFTUEState(payload: any)
+	local validated = readFTUEPayload(payload)
+	if not validated then
+		return
+	end
+	local kind = validated.Kind
+	if kind == "KINETIC_OBJECTIVE" then
+		rememberProgress(validated.DestinationPosition, "RECOVER THE KINETIC POD")
+	elseif kind == "FIRST_HYPE" then
+		clearObjective()
+		showMessage(
+			string.format("+%d HYPE\nDISPLAYED ODDLINGS GENERATE HYPE", validated.Amount),
+			Color3.fromRGB(255, 220, 91),
+			3
+		)
+	elseif kind == "SPRINGLEGS_GUIDANCE" then
+		rememberProgress(validated.DestinationPosition, "INSTALL SPRINGLEGS")
+		showMessage(
+			"NEW COMPONENT AVAILABLE\nSPRINGLEGS\nINSTALL AT PROTOTYPE ASSEMBLER",
+			Color3.fromRGB(117, 255, 178),
+			4
+		)
+	elseif kind == "SPRINGLEGS_INSTALLED" then
+		clearObjective()
+		showMessage("SPRINGLEGS INSTALLED\nCHASE MOBILITY BOOST", Color3.fromRGB(117, 255, 178), 2.4)
+	elseif kind == "ADVANCED_GUIDANCE" then
+		rememberProgress(validated.DestinationPosition, "FURNACE POD - HIGH SECURITY")
+		showMessage(
+			"ADVANCED RECOVERY\nFURNACE POD - HIGH SECURITY\nREWARD: SIGNATURE ODDLING",
+			Color3.fromRGB(255, 183, 62),
+			4
+		)
+	end
+end
+
 function KineticPodRecoveryController.Start()
 	if started then
 		return
@@ -387,6 +534,8 @@ function KineticPodRecoveryController.Start()
 	local network = requireChildOfClass(ReplicatedStorage, "ODDWORKSNetwork", "Folder")
 	local kineticRemote = requireChildOfClass(network, "KineticPodRecoveryState", "RemoteEvent") :: RemoteEvent
 	local furnaceRemote = requireChildOfClass(network, "FurnacePodChaseState", "RemoteEvent") :: RemoteEvent
+	local ftueStateRemote = requireChildOfClass(network, "FirstTimeExperienceState", "RemoteEvent") :: RemoteEvent
+	ftueRequestRemote = requireChildOfClass(network, "FirstTimeExperienceRequest", "RemoteEvent") :: RemoteEvent
 	Players.LocalPlayer.CharacterRemoving:Connect(function()
 		presentationToken += 1
 		clearObjective()
@@ -394,7 +543,16 @@ function KineticPodRecoveryController.Start()
 			banner.Visible = false
 		end
 	end)
+	Players.LocalPlayer.CharacterAdded:Connect(function()
+		task.delay(0.4, function()
+			local request = ftueRequestRemote
+			if request then
+				request:FireServer()
+			end
+		end)
+	end)
 	kineticRemote.OnClientEvent:Connect(handleKineticState)
+	ftueStateRemote.OnClientEvent:Connect(handleFTUEState)
 	furnaceRemote.OnClientEvent:Connect(function(payload: any)
 		if typeof(payload) ~= "table" or typeof(payload.Kind) ~= "string" then
 			return
@@ -413,6 +571,10 @@ function KineticPodRecoveryController.Start()
 			clearObjective()
 		end
 	end)
+	local initialRequest = ftueRequestRemote
+	if initialRequest then
+		initialRequest:FireServer()
+	end
 end
 
 return KineticPodRecoveryController

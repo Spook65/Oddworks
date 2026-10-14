@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local Services = script.Parent
+local FirstTimeExperienceService = require(Services:WaitForChild("FirstTimeExperienceService"))
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
 local ModularPrototypeStateService = require(Services:WaitForChild("ModularPrototypeStateService"))
 local WorkshopService = require(Services:WaitForChild("WorkshopService"))
@@ -194,6 +195,7 @@ local function handlePromptTriggered(player: Player, record: AssemblerRecord)
 
 	local remote = assemblerOpen
 	if remote then
+		FirstTimeExperienceService.RecordAssemblerOpened(player)
 		remote:FireClient(player)
 	end
 end
@@ -232,6 +234,7 @@ local function handleAssemblyRequest(player: Player, ...: any)
 	end
 	sendResult(player, resultCode, mode)
 	if resultCode == "ASSEMBLY_SUCCESS" then
+		FirstTimeExperienceService.RecordAssemblySuccess(player)
 		print(string.format("[ODDWORKS][PrototypeAssembly] %s %s SmallBiped_v1.", player.Name, string.lower(mode or "updated")))
 	end
 end
