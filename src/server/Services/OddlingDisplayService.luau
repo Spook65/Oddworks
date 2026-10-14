@@ -2,6 +2,7 @@
 
 local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local Services = script.Parent
@@ -511,6 +512,52 @@ local function collectExistingDisplays(container: Folder): { [number]: Model }
 	return displaysBySlot
 end
 
+local function playPedestalRevealEffect(container: Folder, slot: DisplaySlot, speciesId: string)
+	local isKilnback = speciesId == "Kilnback"
+	local color = if isKilnback then Color3.fromRGB(255, 128, 35) else Color3.fromRGB(58, 225, 255)
+	local duration = if isKilnback then 1.15 else 0.65
+	local endSize = if isKilnback then Vector3.new(10, 10, 10) else Vector3.new(5.5, 5.5, 5.5)
+
+	local pulse = Instance.new("Part")
+	pulse.Name = speciesId .. "RevealPulse"
+	pulse.Anchored = true
+	pulse.CanCollide = false
+	pulse.CanQuery = false
+	pulse.CanTouch = false
+	pulse.CastShadow = false
+	pulse.Shape = Enum.PartType.Ball
+	pulse.Material = Enum.Material.Neon
+	pulse.Color = color
+	pulse.Transparency = 0.22
+	pulse.Size = if isKilnback then Vector3.new(2.4, 2.4, 2.4) else Vector3.new(1.2, 1.2, 1.2)
+	pulse.CFrame = slot.WorldCFrame * CFrame.new(0, if isKilnback then 3.5 else 1.8, 0)
+	pulse.Parent = container
+
+	local light = Instance.new("PointLight")
+	light.Color = color
+	light.Brightness = if isKilnback then 7 else 4
+	light.Range = if isKilnback then 22 else 13
+	light.Shadows = false
+	light.Parent = pulse
+
+	local tween = TweenService:Create(
+		pulse,
+		TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Size = endSize, Transparency = 1 }
+	)
+	tween:Play()
+	tween.Completed:Once(function()
+		if pulse.Parent ~= nil then
+			pulse:Destroy()
+		end
+	end)
+	task.delay(duration + 0.5, function()
+		if pulse.Parent ~= nil then
+			pulse:Destroy()
+		end
+	end)
+end
+
 local function updatePedestals(
 	container: Folder,
 	plot: BasePart,
@@ -578,9 +625,16 @@ local function updatePedestals(
 		pointLight.Brightness = if pointLight.Enabled then 1.2 else 0
 		if allocation and previousSpeciesId ~= allocation.SpeciesId then
 			local pulseSpeciesId = allocation.SpeciesId
+			playPedestalRevealEffect(container, slot, pulseSpeciesId)
 			pointLight.Brightness = 4
-			task.delay(0.7, function()
+			local pulseDuration = if pulseSpeciesId == "Kilnback" then 1.15 else 0.7
+			pointLight.Color = if pulseSpeciesId == "Kilnback"
+				then Color3.fromRGB(255, 128, 35)
+				else Color3.fromRGB(58, 225, 255)
+			pointLight.Brightness = if pulseSpeciesId == "Kilnback" then 7 else 4
+			task.delay(pulseDuration, function()
 				if pedestal.Parent ~= nil and pedestal:GetAttribute("DisplayedSpeciesId") == pulseSpeciesId then
+					pointLight.Color = plot.Color
 					pointLight.Brightness = 1.2
 				end
 			end)

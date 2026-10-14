@@ -2,6 +2,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local Services = script.Parent
@@ -60,6 +61,7 @@ local FurnacePodChaseService = {}
 local RUNTIME_ROOT_NAME = "ODDWORKSRuntime"
 local RUNTIME_FOLDER_NAME = "FurnacePodChase"
 local RECOVERY_ACTIVITY_ID = "FURNACE_POD"
+local CARRY_BASE_CFRAME = CFrame.new(0, 0.4, -1.85) * CFrame.Angles(math.rad(-6), 0, math.rad(3))
 
 local state: ChaseState = "AVAILABLE"
 local carrier: Player? = nil
@@ -252,7 +254,26 @@ local function setTargetAvailable(isAvailable: boolean)
 			part.CanTouch = if isAvailable then presentation.CanTouch else false
 		end
 	end
+	for _, descendant in ipairs(chaseRuntime.TargetModel:GetDescendants()) do
+		if descendant:IsA("Light") or descendant:IsA("Highlight") then
+			descendant.Enabled = isAvailable
+		end
+	end
 	chaseRuntime.Prompt.Enabled = isAvailable
+end
+
+local function startTargetPulse(targetModel: Model)
+	for _, lightName in ipairs({ "CoreLight", "WarningLight" }) do
+		local light = targetModel:FindFirstChild(lightName, true)
+		if light and light:IsA("PointLight") then
+			local brightness = if lightName == "CoreLight" then 4.8 else 3.4
+			TweenService:Create(
+				light,
+				TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+				{ Brightness = brightness }
+			):Play()
+		end
+	end
 end
 
 local function setAvailabilityText(status: string)
@@ -322,11 +343,11 @@ local function createCarry(player: Player, characterRoot: BasePart): Model
 	root.Massless = true
 	root.Size = Vector3.new(0.5, 0.5, 0.5)
 	root.Transparency = 1
-	root.CFrame = characterRoot.CFrame * CFrame.new(0, 1.5, 1.65)
+	root.CFrame = characterRoot.CFrame * CARRY_BASE_CFRAME
 	root.Parent = model
 	model.PrimaryPart = root
 
-	local function addPart(name: string, localCFrame: CFrame, size: Vector3, color: Color3, material: Enum.Material, shape: Enum.PartType?)
+	local function addPart(name: string, localCFrame: CFrame, size: Vector3, color: Color3, material: Enum.Material, shape: Enum.PartType?): Part
 		local part = newDisplayPart(model, name, root.CFrame, localCFrame, size, color, material, shape)
 		part.Anchored = false
 		part.Massless = true
@@ -335,20 +356,61 @@ local function createCarry(player: Player, characterRoot: BasePart): Model
 		weld.Part0 = root
 		weld.Part1 = part
 		weld.Parent = root
+		return part
 	end
 
-	addPart("PodShell", CFrame.identity, Vector3.new(2.4, 3, 2.2), Color3.fromRGB(73, 76, 78), Enum.Material.CorrodedMetal, Enum.PartType.Ball)
-	addPart("FurnaceCore", CFrame.new(0, 0, -0.95), Vector3.new(1.25, 1.6, 0.35), Color3.fromRGB(255, 116, 31), Enum.Material.Neon, nil)
-	addPart("TopBand", CFrame.new(0, 1.05, 0), Vector3.new(2.5, 0.35, 2.3), Color3.fromRGB(224, 164, 56), Enum.Material.Metal, nil)
-	addPart("BottomBand", CFrame.new(0, -1.05, 0), Vector3.new(2.5, 0.35, 2.3), Color3.fromRGB(224, 164, 56), Enum.Material.Metal, nil)
+	addPart("PodShell", CFrame.identity, Vector3.new(2.8, 3.4, 2.6), Color3.fromRGB(73, 76, 78), Enum.Material.CorrodedMetal, Enum.PartType.Ball)
+	local core = addPart("FurnaceCore", CFrame.new(0, 0, -1.15), Vector3.new(1.5, 1.95, 0.4), Color3.fromRGB(255, 116, 31), Enum.Material.Neon, nil)
+	addPart("TopBand", CFrame.new(0, 1.2, 0), Vector3.new(2.9, 0.4, 2.7), Color3.fromRGB(224, 164, 56), Enum.Material.Metal, nil)
+	addPart("BottomBand", CFrame.new(0, -1.2, 0), Vector3.new(2.9, 0.4, 2.7), Color3.fromRGB(224, 164, 56), Enum.Material.Metal, nil)
+	addPart("LeftGrip", CFrame.new(-1.5, 0, 0), Vector3.new(0.28, 2.15, 0.42), Color3.fromRGB(194, 143, 53), Enum.Material.Metal, nil)
+	addPart("RightGrip", CFrame.new(1.5, 0, 0), Vector3.new(0.28, 2.15, 0.42), Color3.fromRGB(194, 143, 53), Enum.Material.Metal, nil)
 
-	local characterWeld = Instance.new("WeldConstraint")
+	local carryLight = Instance.new("PointLight")
+	carryLight.Name = "CarryLight"
+	carryLight.Color = Color3.fromRGB(255, 105, 28)
+	carryLight.Brightness = 3.2
+	carryLight.Range = 14
+	carryLight.Shadows = false
+	carryLight.Parent = core
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "CarryOutline"
+	highlight.FillColor = Color3.fromRGB(255, 105, 28)
+	highlight.FillTransparency = 0.93
+	highlight.OutlineColor = Color3.fromRGB(255, 177, 66)
+	highlight.OutlineTransparency = 0.18
+	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+	highlight.Parent = model
+
+	local characterWeld = Instance.new("Weld")
 	characterWeld.Name = "CharacterCarryWeld"
 	characterWeld.Part0 = characterRoot
 	characterWeld.Part1 = root
+	characterWeld.C0 = CARRY_BASE_CFRAME
+	characterWeld.C1 = CFrame.identity
 	characterWeld.Parent = root
 	model.Parent = characterRoot.Parent
 	return model
+end
+
+local function updateCarryMotion(player: Player, now: number)
+	local model = carryModel
+	local character = player.Character
+	local characterRoot = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	local root = if model then model:FindFirstChild("RootPart") else nil
+	local joint = if root then root:FindFirstChild("CharacterCarryWeld") else nil
+	if not characterRoot
+		or not characterRoot:IsA("BasePart")
+		or not joint
+		or not joint:IsA("Weld")
+	then
+		return
+	end
+	local velocity = characterRoot.AssemblyLinearVelocity
+	local movementScale = math.clamp(Vector3.new(velocity.X, 0, velocity.Z).Magnitude / 16, 0, 1.25)
+	local bob = math.sin(now * 4.6) * 0.075 * movementScale
+	local roll = math.sin(now * 2.7) * math.rad(3.2) * movementScale
+	joint.C0 = CARRY_BASE_CFRAME * CFrame.new(0, bob, 0) * CFrame.Angles(0, 0, roll)
 end
 
 local function createWarden(spawnMarker: BasePart): Model
@@ -374,6 +436,7 @@ local function createWarden(spawnMarker: BasePart): Model
 	newDisplayPart(model, "Head", root.CFrame, CFrame.new(0, 5, 0), Vector3.new(2.5, 1.8, 2.1), Color3.fromRGB(98, 91, 79), Enum.Material.Metal, nil)
 	local eye = newDisplayPart(model, "Eye", root.CFrame, CFrame.new(0, 5, -1.1), Vector3.new(1.2, 0.45, 0.25), Color3.fromRGB(255, 190, 54), Enum.Material.Neon, nil)
 	local alarmBeacon = newDisplayPart(model, "AlarmBeacon", root.CFrame, CFrame.new(0, 6.25, 0), Vector3.new(0.8, 0.8, 0.8), Color3.fromRGB(244, 70, 38), Enum.Material.Neon, Enum.PartType.Ball)
+	local wakePulse = newDisplayPart(model, "WakePulse", root.CFrame, CFrame.new(0, 0.1, 0) * CFrame.Angles(0, 0, math.rad(90)), Vector3.new(0.15, 6.2, 6.2), Color3.fromRGB(255, 76, 43), Enum.Material.Neon, Enum.PartType.Cylinder)
 	newDisplayPart(model, "LeftArm", root.CFrame, CFrame.new(-2.25, 2.7, 0), Vector3.new(0.8, 3.2, 0.9), Color3.fromRGB(80, 83, 80), Enum.Material.DiamondPlate, nil)
 	newDisplayPart(model, "RightArm", root.CFrame, CFrame.new(2.25, 2.7, 0), Vector3.new(0.8, 3.2, 0.9), Color3.fromRGB(80, 83, 80), Enum.Material.DiamondPlate, nil)
 	newDisplayPart(model, "LeftTread", root.CFrame, CFrame.new(-1.05, 0.55, 0), Vector3.new(1.5, 1.1, 2.3), Color3.fromRGB(38, 41, 41), Enum.Material.Metal, nil)
@@ -387,6 +450,7 @@ local function createWarden(spawnMarker: BasePart): Model
 	alarmLight.Parent = alarmBeacon
 	eye.Transparency = 0.65
 	alarmBeacon.Transparency = 0.65
+	wakePulse.Transparency = 1
 
 	model.Parent = folder
 	return model
@@ -404,7 +468,7 @@ local function isCarryRuntimePresent(player: Player): boolean
 		and root:IsA("BasePart")
 		and model.PrimaryPart == root
 		and weld ~= nil
-		and weld:IsA("WeldConstraint")
+		and weld:IsA("Weld")
 		and weld.Part0 ~= nil
 		and weld.Part0:IsDescendantOf(character)
 		and weld.Part1 == root
@@ -464,14 +528,24 @@ local function setWardenAlarm(bright: boolean)
 			light.Brightness = if bright then 4 else 0
 		end
 	end
+	local wakePulse = model:FindFirstChild("WakePulse")
+	if wakePulse and wakePulse:IsA("BasePart") then
+		wakePulse.Transparency = if bright then 0.42 else 1
+	end
 end
 
 local function runActivationTelegraph(player: Player, attemptToken: number)
 	local bright = false
+	local nextAlarmToggle = 0
 	while generation == attemptToken and carrier == player and state == "ACTIVATING" do
-		bright = not bright
-		setWardenAlarm(bright)
-		task.wait(0.25)
+		local now = os.clock()
+		updateCarryMotion(player, now)
+		if now >= nextAlarmToggle then
+			bright = not bright
+			setWardenAlarm(bright)
+			nextAlarmToggle = now + 0.25
+		end
+		task.wait(0.1)
 	end
 end
 
@@ -669,6 +743,7 @@ local function runChase(player: Player, attemptToken: number, candidate: Definit
 		end
 
 		local now = os.clock()
+		updateCarryMotion(player, now)
 		local elapsed = now - chaseStartedAt
 		local stage = getStage(elapsed, candidate)
 		if stage ~= currentStage then
@@ -1106,6 +1181,7 @@ function FurnacePodChaseService.Start()
 	validateDefinition(candidate)
 	definition = candidate
 	runtime = discoverRuntime(candidate)
+	startTargetPulse((runtime :: ChaseRuntime).TargetModel)
 
 	local network = requireChildOfClass(ReplicatedStorage, "ODDWORKSNetwork", "Folder")
 	stateRemote = requireChildOfClass(network, "FurnacePodChaseState", "RemoteEvent") :: RemoteEvent

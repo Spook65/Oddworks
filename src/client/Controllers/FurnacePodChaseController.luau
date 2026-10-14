@@ -6,6 +6,8 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local RecoveryFeelEffects = require(script.Parent.RecoveryFeelEffects)
+
 local FurnacePodChaseController = {}
 
 local banner: TextLabel? = nil
@@ -376,6 +378,18 @@ local function showObjectiveCue(destination: Vector3)
 	target.Position = destination + Vector3.new(0, 2.8, 0)
 	target.Parent = Workspace
 	objectiveTarget = target
+	local safeLight = Instance.new("PointLight")
+	safeLight.Name = "SafeZonePulse"
+	safeLight.Color = Color3.fromRGB(111, 255, 173)
+	safeLight.Brightness = 0.8
+	safeLight.Range = 13
+	safeLight.Shadows = false
+	safeLight.Parent = target
+	TweenService:Create(
+		safeLight,
+		TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		{ Brightness = 2.2 }
+	):Play()
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "WorkshopObjectiveLabel"
@@ -450,6 +464,7 @@ local function clearChasePresentation()
 	end
 	hideSpringLegsActive()
 	clearObjectiveCue()
+	RecoveryFeelEffects.Clear()
 end
 
 local function isFiniteVector3(value: any): boolean
@@ -552,6 +567,7 @@ function FurnacePodChaseController.Start()
 				backdrop.Visible = true
 			end
 		elseif kind == "ACTIVATING" then
+			RecoveryFeelEffects.Theft(Color3.fromRGB(255, 116, 31))
 			showObjectiveCue(destinationPosition :: Vector3)
 			showMessage(
 				string.format(
@@ -570,6 +586,14 @@ function FurnacePodChaseController.Start()
 		elseif kind == "CHASE_STARTED" or kind == "STAGE" then
 			if kind == "CHASE_STARTED" then
 				hideSpringLegsActive()
+				RecoveryFeelEffects.StartThreat(
+					"FurnacePodChase",
+					"ScrapWarden",
+					Color3.fromRGB(255, 73, 39),
+					stage :: number
+				)
+			else
+				RecoveryFeelEffects.SetThreatStage(stage :: number)
 			end
 			showMessage(
 				string.format("SCRAP WARDEN ACTIVE\nRETURN TO YOUR WORKSHOP  |  THREAT %d", stage :: number),
@@ -580,14 +604,17 @@ function FurnacePodChaseController.Start()
 		elseif kind == "CAUGHT" then
 			hideSpringLegsActive()
 			clearObjectiveCue()
+			RecoveryFeelEffects.Caught()
 			showMessage("CAUGHT - FURNACE POD LOST\nBANKED INVENTORY AND BUILDS ARE SAFE", Color3.fromRGB(255, 92, 73), 2.2, false)
 		elseif kind == "SECURED" then
 			hideSpringLegsActive()
 			clearObjectiveCue()
+			RecoveryFeelEffects.Secured()
 			showMessage("POD SECURED\nKILNBACK REVEAL INCOMING", Color3.fromRGB(95, 244, 154), 0, false)
 		elseif kind == "REVEALED" then
 			hideSpringLegsActive()
 			clearObjectiveCue()
+			RecoveryFeelEffects.Revealed(Color3.fromRGB(255, 133, 36), true)
 			showMessage("ODDITY REVEALED\n" .. string.upper(revealText :: string), Color3.fromRGB(255, 174, 48), 4, false)
 		elseif kind == "CANCELLED" then
 			clearChasePresentation()

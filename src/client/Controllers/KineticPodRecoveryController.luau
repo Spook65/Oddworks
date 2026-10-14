@@ -6,6 +6,8 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local RecoveryFeelEffects = require(script.Parent.RecoveryFeelEffects)
+
 local KineticPodRecoveryController = {}
 
 type KineticGuidanceMode = "EDGE" | "WORLD" | "NEAR"
@@ -258,6 +260,8 @@ local function showObjective(destination: Vector3, text: string)
 	objectiveTarget = target
 	local objectiveColor = if string.find(text, "FURNACE", 1, true)
 		then Color3.fromRGB(255, 183, 62)
+		elseif text == "RETURN TO WORKSHOP"
+		then Color3.fromRGB(117, 255, 178)
 		elseif string.find(text, "SPRINGLEGS", 1, true)
 		then Color3.fromRGB(117, 255, 178)
 		else Color3.fromRGB(108, 232, 255)
@@ -406,6 +410,7 @@ local function handleKineticState(payload: any)
 	if kind == "ACTIVATING" then
 		savedProgressDestination = nil
 		savedProgressText = nil
+		RecoveryFeelEffects.Theft(Color3.fromRGB(58, 225, 255))
 		showObjective(validated.DestinationPosition, "RETURN TO WORKSHOP")
 		showMessage(
 			string.format("KINETIC POD STOLEN\nSCOUT WARDEN WAKING  |  %.1fs HEAD START", validated.HeadStartSeconds),
@@ -413,6 +418,16 @@ local function handleKineticState(payload: any)
 			0
 		)
 	elseif kind == "CHASE_STARTED" or kind == "STAGE" then
+		if kind == "CHASE_STARTED" then
+			RecoveryFeelEffects.StartThreat(
+				"KineticPodRecovery",
+				"ScoutWarden",
+				Color3.fromRGB(255, 128, 72),
+				validated.Stage
+			)
+		else
+			RecoveryFeelEffects.SetThreatStage(validated.Stage)
+		end
 		showMessage(
 			string.format("SCOUT WARDEN ACTIVE\nRETURN HOME  |  THREAT %d", validated.Stage),
 			Color3.fromRGB(108, 232, 255),
@@ -420,42 +435,55 @@ local function handleKineticState(payload: any)
 		)
 	elseif kind == "CAUGHT" then
 		clearObjective()
+		RecoveryFeelEffects.Caught()
 		showMessage("POD LOST\nTHE SCOUT WARDEN CAUGHT YOU\nTRY AGAIN", Color3.fromRGB(255, 104, 82), 2.4)
 	elseif kind == "CANCELLED" then
 		clearObjective()
+		RecoveryFeelEffects.Clear()
 		showMessage("KINETIC RECOVERY CANCELLED", Color3.fromRGB(224, 155, 122), 1.8)
 	elseif kind == "REWARD_FAILED" then
 		clearObjective()
+		RecoveryFeelEffects.Clear()
 		showMessage("RECOVERY COULD NOT COMPLETE\nTRY AGAIN", Color3.fromRGB(255, 104, 82), 2.4)
 	elseif kind == "SECURED" then
 		clearObjective()
+		RecoveryFeelEffects.Secured()
 		if validated.FTUEManaged then
 			showMessage("POD SECURED", Color3.fromRGB(117, 255, 178), 1.1)
 			local token = presentationToken
 			task.delay(1.2, function()
 				if presentationToken == token then
+					RecoveryFeelEffects.Revealed(Color3.fromRGB(58, 225, 255), false)
 					showMessage("VOLTLET RECOVERED", Color3.fromRGB(108, 232, 255), 1.8)
 				end
 			end)
 			return
 		end
-		local rewardText = string.format("KINETIC POD SECURED\nVOLTLET DISCOVERED  |  OWNED x%d", validated.OwnedCount)
+		showMessage("POD SECURED", Color3.fromRGB(117, 255, 178), 1.1)
+		local rewardText = string.format("VOLTLET DISCOVERED  |  OWNED x%d", validated.OwnedCount)
 		if validated.SpringLegsBonusGranted then
 			rewardText ..= "\nFIRST RECOVERY BONUS: SPRINGLEGS"
 		end
-		showMessage(rewardText, Color3.fromRGB(117, 255, 178), 3)
 		local text = if validated.NextStep == "FURNACE" then "FURNACE POD - HIGH SECURITY" else "EQUIP SPRINGLEGS AT ASSEMBLER"
 		local token = presentationToken
-		task.delay(3.1, function()
+		task.delay(1.2, function()
 			if presentationToken ~= token then
 				return
 			end
-			rememberProgress(validated.DestinationPosition, text)
-			if validated.NextStep == "FURNACE" then
-				showMessage("ADVANCED RECOVERY AVAILABLE\nFURNACE POD - HIGH SECURITY\nREWARD: SIGNATURE ODDITY", Color3.fromRGB(255, 183, 62), 4)
-			elseif validated.SpringLegsBonusGranted then
-				showMessage("SPRINGLEGS AVAILABLE - NOT INSTALLED\nSELECT SPRINGLEGS, THEN REBUILD", Color3.fromRGB(117, 255, 178), 4)
-			end
+			RecoveryFeelEffects.Revealed(Color3.fromRGB(58, 225, 255), false)
+			showMessage(rewardText, Color3.fromRGB(108, 232, 255), 2.8)
+			local rewardToken = presentationToken
+			task.delay(2.9, function()
+				if presentationToken ~= rewardToken then
+					return
+				end
+				rememberProgress(validated.DestinationPosition, text)
+				if validated.NextStep == "FURNACE" then
+					showMessage("ADVANCED RECOVERY AVAILABLE\nFURNACE POD - HIGH SECURITY\nREWARD: SIGNATURE ODDITY", Color3.fromRGB(255, 183, 62), 4)
+				elseif validated.SpringLegsBonusGranted then
+					showMessage("SPRINGLEGS AVAILABLE - NOT INSTALLED\nSELECT SPRINGLEGS, THEN REBUILD", Color3.fromRGB(117, 255, 178), 4)
+				end
+			end)
 		end)
 	elseif kind == "EQUIP_GUIDANCE" then
 		rememberProgress(validated.DestinationPosition, "EQUIP SPRINGLEGS AT ASSEMBLER")
@@ -539,6 +567,7 @@ function KineticPodRecoveryController.Start()
 	Players.LocalPlayer.CharacterRemoving:Connect(function()
 		presentationToken += 1
 		clearObjective()
+		RecoveryFeelEffects.Clear()
 		if banner then
 			banner.Visible = false
 		end
