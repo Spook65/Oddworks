@@ -638,7 +638,9 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 	end
 	-- The persisted Voltlet species count is already the narrow first-recovery
 	-- fact: only the authoritative 0 -> 1 transition earns the component bonus.
-	local shouldGrantSpringLegs = (preRewardState.OwnedOddlings[candidate.RewardSpeciesId] or 0) == 0
+	local previousOwnedCount = preRewardState.OwnedOddlings[candidate.RewardSpeciesId] or 0
+	local firstDiscovery = previousOwnedCount == 0
+	local shouldGrantSpringLegs = firstDiscovery
 	if not PlayerStateService.CanAddOwnedOddling(player, candidate.RewardSpeciesId, candidate.RewardSpeciesCount)
 		or (shouldGrantSpringLegs and not ModularPrototypeStateService.CanAddBankedComponent(
 			player,
@@ -691,6 +693,7 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 		Kind = "SECURED",
 		OddlingId = candidate.RewardSpeciesId,
 		OwnedCount = ownedCount,
+		FirstDiscovery = firstDiscovery,
 		SpringLegsBonusGranted = springLegsGranted,
 		ComponentId = candidate.RewardComponentId,
 		Rarity = candidate.RewardRarity,

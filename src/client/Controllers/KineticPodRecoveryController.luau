@@ -375,6 +375,7 @@ local function readPayload(payload: any): { [string]: any }?
 			or typeof(payload.OwnedCount) ~= "number"
 			or payload.OwnedCount < 1
 			or payload.OwnedCount % 1 ~= 0
+			or typeof(payload.FirstDiscovery) ~= "boolean"
 			or typeof(payload.SpringLegsBonusGranted) ~= "boolean"
 			or payload.ComponentId ~= "SpringLegs"
 			or payload.Rarity ~= "Common"
@@ -454,16 +455,17 @@ local function handleKineticState(payload: any)
 			task.delay(1.2, function()
 				if presentationToken == token then
 					RecoveryFeelEffects.Revealed(Color3.fromRGB(58, 225, 255), false)
-					showMessage("VOLTLET RECOVERED", Color3.fromRGB(108, 232, 255), 1.8)
+					showMessage(
+						if validated.FirstDiscovery then "VOLTLET DISCOVERED" else "VOLTLET RECOVERED",
+						Color3.fromRGB(108, 232, 255),
+						1.8
+					)
 				end
 			end)
 			return
 		end
 		showMessage("POD SECURED", Color3.fromRGB(117, 255, 178), 1.1)
-		local rewardText = string.format("VOLTLET DISCOVERED  |  OWNED x%d", validated.OwnedCount)
-		if validated.SpringLegsBonusGranted then
-			rewardText ..= "\nFIRST RECOVERY BONUS: SPRINGLEGS"
-		end
+		local rewardText = if validated.FirstDiscovery then "VOLTLET DISCOVERED" else "VOLTLET RECOVERED"
 		local text = if validated.NextStep == "FURNACE" then "FURNACE POD - HIGH SECURITY" else "EQUIP SPRINGLEGS AT ASSEMBLER"
 		local token = presentationToken
 		task.delay(1.2, function()
@@ -478,11 +480,6 @@ local function handleKineticState(payload: any)
 					return
 				end
 				rememberProgress(validated.DestinationPosition, text)
-				if validated.NextStep == "FURNACE" then
-					showMessage("ADVANCED RECOVERY AVAILABLE\nFURNACE POD - HIGH SECURITY\nREWARD: SIGNATURE ODDITY", Color3.fromRGB(255, 183, 62), 4)
-				elseif validated.SpringLegsBonusGranted then
-					showMessage("SPRINGLEGS AVAILABLE - NOT INSTALLED\nSELECT SPRINGLEGS, THEN REBUILD", Color3.fromRGB(117, 255, 178), 4)
-				end
 			end)
 		end)
 	elseif kind == "EQUIP_GUIDANCE" then

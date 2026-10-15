@@ -477,18 +477,18 @@ local function isFiniteVector3(value: any): boolean
 		and math.abs(value.Z) < math.huge
 end
 
-local function readPayload(payload: any): (string?, number?, string?, number?, Vector3?, boolean?)
+local function readPayload(payload: any): (string?, number?, string?, number?, Vector3?, boolean?, boolean?)
 	if typeof(payload) ~= "table" or typeof(payload.Kind) ~= "string" then
-		return nil, nil, nil, nil, nil, nil
+		return nil, nil, nil, nil, nil, nil, nil
 	end
 	local kind = payload.Kind
 	if kind == "EXPLANATION" then
 		for key in pairs(payload) do
 			if key ~= "Kind" then
-				return nil, nil, nil, nil, nil, nil
+				return nil, nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, nil, nil, nil, nil, nil
+		return kind, nil, nil, nil, nil, nil, nil
 	elseif kind == "ACTIVATING" then
 		if typeof(payload.HeadStartSeconds) ~= "number"
 			or payload.HeadStartSeconds < 1
@@ -496,7 +496,7 @@ local function readPayload(payload: any): (string?, number?, string?, number?, V
 			or not isFiniteVector3(payload.DestinationPosition)
 			or typeof(payload.SpringLegsActive) ~= "boolean"
 		then
-			return nil, nil, nil, nil, nil, nil
+			return nil, nil, nil, nil, nil, nil, nil
 		end
 		for key in pairs(payload) do
 			if key ~= "Kind"
@@ -504,43 +504,44 @@ local function readPayload(payload: any): (string?, number?, string?, number?, V
 				and key ~= "DestinationPosition"
 				and key ~= "SpringLegsActive"
 			then
-				return nil, nil, nil, nil, nil, nil
+				return nil, nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, nil, nil, payload.HeadStartSeconds, payload.DestinationPosition, payload.SpringLegsActive
+		return kind, nil, nil, payload.HeadStartSeconds, payload.DestinationPosition, payload.SpringLegsActive, nil
 	elseif kind == "CHASE_STARTED" or kind == "STAGE" then
 		if typeof(payload.Stage) ~= "number" or payload.Stage % 1 ~= 0 or payload.Stage < 1 or payload.Stage > 3 then
-			return nil, nil, nil, nil, nil, nil
+			return nil, nil, nil, nil, nil, nil, nil
 		end
 		for key in pairs(payload) do
 			if key ~= "Kind" and key ~= "Stage" then
-				return nil, nil, nil, nil, nil, nil
+				return nil, nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, payload.Stage, nil, nil, nil, nil
+		return kind, payload.Stage, nil, nil, nil, nil, nil
 	elseif kind == "REVEALED" then
 		if payload.SignatureId ~= "Kilnback"
 			or typeof(payload.OwnedCount) ~= "number"
 			or payload.OwnedCount < 1
 			or payload.OwnedCount % 1 ~= 0
+			or typeof(payload.FirstDiscovery) ~= "boolean"
 		then
-			return nil, nil, nil, nil, nil, nil
+			return nil, nil, nil, nil, nil, nil, nil
 		end
 		for key in pairs(payload) do
-			if key ~= "Kind" and key ~= "SignatureId" and key ~= "OwnedCount" then
-				return nil, nil, nil, nil, nil, nil
+			if key ~= "Kind" and key ~= "SignatureId" and key ~= "OwnedCount" and key ~= "FirstDiscovery" then
+				return nil, nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, nil, string.format("%s  |  OWNED x%d", payload.SignatureId, payload.OwnedCount), nil, nil, nil
+		return kind, nil, payload.SignatureId, nil, nil, nil, payload.FirstDiscovery
 	elseif kind == "CAUGHT" or kind == "SECURED" or kind == "CANCELLED" then
 		for key in pairs(payload) do
 			if key ~= "Kind" then
-				return nil, nil, nil, nil, nil, nil
+				return nil, nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, nil, nil, nil, nil, nil
+		return kind, nil, nil, nil, nil, nil, nil
 	end
-	return nil, nil, nil, nil, nil, nil
+	return nil, nil, nil, nil, nil, nil, nil
 end
 
 function FurnacePodChaseController.Start()
@@ -557,7 +558,7 @@ function FurnacePodChaseController.Start()
 		clearChasePresentation()
 	end)
 	stateRemote.OnClientEvent:Connect(function(payload: any)
-		local kind, stage, revealText, headStartSeconds, destinationPosition, springLegsActive = readPayload(payload)
+		local kind, stage, revealText, headStartSeconds, destinationPosition, springLegsActive, firstDiscovery = readPayload(payload)
 		if not kind then
 			return
 		end
@@ -615,7 +616,12 @@ function FurnacePodChaseController.Start()
 			hideSpringLegsActive()
 			clearObjectiveCue()
 			RecoveryFeelEffects.Revealed(Color3.fromRGB(255, 133, 36), true)
-			showMessage("ODDITY REVEALED\n" .. string.upper(revealText :: string), Color3.fromRGB(255, 174, 48), 4, false)
+			showMessage(
+				string.upper(revealText :: string) .. (if firstDiscovery then " DISCOVERED" else " RECOVERED"),
+				Color3.fromRGB(255, 174, 48),
+				4,
+				false
+			)
 		elseif kind == "CANCELLED" then
 			clearChasePresentation()
 		end

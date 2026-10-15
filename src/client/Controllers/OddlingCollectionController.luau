@@ -8,8 +8,6 @@ type SpeciesEntry = {
 	OwnedCount: number,
 	DisplayedCount: number,
 	CollectionCount: number,
-	HypePerInterval: number,
-	HypeIntervalSeconds: number,
 }
 
 type SlotEntry = {
@@ -73,14 +71,6 @@ local function isIntegerInRange(value: any, minimum: number, maximum: number): b
 		and value <= maximum
 end
 
-local function isFiniteNonnegativeNumber(value: any): boolean
-	return typeof(value) == "number"
-		and value == value
-		and value ~= math.huge
-		and value ~= -math.huge
-		and value >= 0
-end
-
 local function isSpeciesId(value: any): boolean
 	return typeof(value) == "string" and #value > 0 and #value <= MAX_SPECIES_ID_LENGTH
 end
@@ -109,9 +99,6 @@ local function readSnapshot(payload: any): CollectionSnapshot?
 			or not isIntegerInRange(entry.DisplayedCount, 0, MAX_SLOTS)
 			or not isIntegerInRange(entry.CollectionCount, 0, 1000000)
 			or entry.DisplayedCount + entry.CollectionCount ~= entry.OwnedCount
-			or not isFiniteNonnegativeNumber(entry.HypePerInterval)
-			or not isFiniteNonnegativeNumber(entry.HypeIntervalSeconds)
-			or entry.HypeIntervalSeconds <= 0
 		then
 			return nil
 		end
@@ -121,8 +108,6 @@ local function readSnapshot(payload: any): CollectionSnapshot?
 			OwnedCount = entry.OwnedCount,
 			DisplayedCount = entry.DisplayedCount,
 			CollectionCount = entry.CollectionCount,
-			HypePerInterval = entry.HypePerInterval,
-			HypeIntervalSeconds = entry.HypeIntervalSeconds,
 		})
 	end
 
@@ -243,7 +228,7 @@ local function renderSpeciesRow(entry: SpeciesEntry, layoutOrder: number)
 	end
 	local row = Instance.new("Frame")
 	row.Name = entry.SpeciesId .. "Row"
-	row.Size = UDim2.new(1, 0, 0, 88)
+	row.Size = UDim2.new(1, 0, 0, 64)
 	row.BackgroundColor3 = if selectedSpeciesId == entry.SpeciesId
 		then Color3.fromRGB(44, 72, 64)
 		else Color3.fromRGB(38, 43, 42)
@@ -261,14 +246,12 @@ local function renderSpeciesRow(entry: SpeciesEntry, layoutOrder: number)
 		row,
 		"Counts",
 		string.format(
-			"OWNED %d   DISPLAYED %d   IN COLLECTION %d\n+%g Hype / %gs while displayed",
+			"OWNED %d   DISPLAYED %d   IN COLLECTION %d",
 			entry.OwnedCount,
 			entry.DisplayedCount,
-			entry.CollectionCount,
-			entry.HypePerInterval,
-			entry.HypeIntervalSeconds
+			entry.CollectionCount
 		),
-		UDim2.new(1, -150, 0, 48)
+		UDim2.new(1, -150, 0, 24)
 	)
 	counts.Position = UDim2.fromOffset(12, 34)
 	counts.TextSize = 12
@@ -410,23 +393,12 @@ local function handleFeedback(payload: any)
 		and typeof(payload.FirstOwnedCopy) == "boolean"
 	then
 		local function showOddlingAdded()
-			local heading = string.format("NEW ODDLING\n%s +%d", string.upper(payload.SpeciesId), payload.AddedCount)
-			if payload.AutoDisplayedCount > 0 and isIntegerInRange(payload.FirstSlotIndex, 1, MAX_SLOTS) then
-				local outcome = string.format("\nDISPLAYED IN SLOT %d", payload.FirstSlotIndex)
-				if payload.DisplayFull == true then
-					outcome ..= "\nREMAINDER ADDED TO COLLECTION"
-				end
-				showFeedback(heading .. outcome, true)
-			else
-				showFeedback(heading .. "\nADDED TO COLLECTION - DISPLAY FULL", true)
+			if payload.DisplayFull == true then
+				showFeedback(string.upper(payload.SpeciesId) .. " ADDED TO COLLECTION\nWORKSHOP DISPLAY FULL", true)
 			end
 		end
-		-- The first Voltlet display confirmation follows the secure/reveal banner
-		-- instead of competing with it. Repeat recoveries retain immediate feedback.
-		if payload.SpeciesId == "Voltlet" and payload.FirstOwnedCopy == true then
-			task.delay(3.2, showOddlingAdded)
-		else
-			showOddlingAdded()
+		if payload.DisplayFull == true then
+			task.delay(4.2, showOddlingAdded)
 		end
 	elseif payload.Kind == "DISPLAY_ASSIGNED"
 		and isSpeciesId(payload.SpeciesId)
@@ -541,6 +513,11 @@ local function createInterface()
 	feedbackLabel = feedback
 
 	local function openCollection()
+		local indexGui = playerGui:FindFirstChild("ODDWORKSOddlingIndexGui")
+		local indexPanel = if indexGui then indexGui:FindFirstChild("IndexPanel") else nil
+		if indexPanel and indexPanel:IsA("GuiObject") then
+			indexPanel.Visible = false
+		end
 		collectionPanel.Visible = true
 		local remote = requestRemote
 		if remote then

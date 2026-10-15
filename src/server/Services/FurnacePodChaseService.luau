@@ -683,6 +683,13 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 			return
 		end
 
+		local preRewardState = PlayerStateService.GetSnapshot(player)
+		if not preRewardState then
+			cancelAttempt(player, attemptToken, "REWARD_FAILED")
+			return
+		end
+		local firstDiscovery = (preRewardState.OwnedOddlings.Kilnback or 0) == 0
+
 		if not OddlingDisplayService.HasRuntimeTemplate("Kilnback")
 			or not SignatureDiscoveryService.CanRevealKilnbackFromFurnacePod(player)
 			or not PlayerStateService.CanAddOwnedOddling(player, "Kilnback", 1)
@@ -708,7 +715,12 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 		carrier = nil
 		local updatedState = PlayerStateService.GetSnapshot(player)
 		local ownedCount = if updatedState then updatedState.OwnedOddlings.Kilnback or 0 else 0
-		fireCarrier(player, { Kind = "REVEALED", SignatureId = "Kilnback", OwnedCount = ownedCount })
+		fireCarrier(player, {
+			Kind = "REVEALED",
+			SignatureId = "Kilnback",
+			OwnedCount = ownedCount,
+			FirstDiscovery = firstDiscovery,
+		})
 		generation += 1
 		local resetToken = generation
 		state = "RESETTING"

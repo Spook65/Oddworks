@@ -202,9 +202,13 @@ local function buildClientSnapshot(player: Player): { [string]: any }?
 	local maxCapacity = WorkshopLevels.GetMaxDisplayCapacity()
 	local displayedCounts = countLoadoutSpecies(loadout, capacity)
 	local species = {}
+	local indexSpecies = {}
+	local publicDiscoveredCount = 0
+	local publicSpeciesCount = 0
 	local totalOwned = 0
 	local totalDisplayed = 0
-	for _, definition in ipairs(Oddlings.GetAllDefinitions()) do
+	local definitions = Oddlings.GetAllDefinitions()
+	for _, definition in ipairs(definitions) do
 		local ownedCount = playerState.OwnedOddlings[definition.SpeciesId] or 0
 		if ownedCount > 0 then
 			local displayedCount = displayedCounts[definition.SpeciesId] or 0
@@ -215,8 +219,45 @@ local function buildClientSnapshot(player: Player): { [string]: any }?
 				OwnedCount = ownedCount,
 				DisplayedCount = displayedCount,
 				CollectionCount = ownedCount - displayedCount,
+			})
+		end
+	end
+	local indexDefinitions = table.clone(definitions)
+	table.sort(indexDefinitions, function(left, right): boolean
+		if left.IndexOrder == right.IndexOrder then
+			return left.SpeciesId < right.SpeciesId
+		end
+		return left.IndexOrder < right.IndexOrder
+	end)
+	for _, definition in ipairs(indexDefinitions) do
+		if not definition.IndexVisible then
+			continue
+		end
+		publicSpeciesCount += 1
+		local ownedCount = playerState.OwnedOddlings[definition.SpeciesId] or 0
+		if ownedCount > 0 then
+			publicDiscoveredCount += 1
+			local displayedCount = displayedCounts[definition.SpeciesId] or 0
+			table.insert(indexSpecies, {
+				Discovered = true,
+				IndexNumber = definition.IndexNumber,
+				SpeciesId = definition.SpeciesId,
+				DisplayName = definition.DisplayName,
+				Classification = definition.Classification,
+				FlavorText = definition.FlavorText,
+				OwnedCount = ownedCount,
+				DisplayedCount = displayedCount,
+				CollectionCount = ownedCount - displayedCount,
 				HypePerInterval = definition.HypePerInterval,
 				HypeIntervalSeconds = definition.HypeIntervalSeconds,
+				RecoverySource = definition.RecoverySource,
+				SecurityTier = definition.SecurityTier,
+				AccentColor = definition.IndexAccentColor,
+			})
+		else
+			table.insert(indexSpecies, {
+				Discovered = false,
+				IndexNumber = definition.IndexNumber,
 			})
 		end
 	end
@@ -234,6 +275,9 @@ local function buildClientSnapshot(player: Player): { [string]: any }?
 		UsedSlots = totalDisplayed,
 		CollectionOnlyCount = totalOwned - totalDisplayed,
 		Species = species,
+		IndexSpecies = indexSpecies,
+		PublicDiscoveredCount = publicDiscoveredCount,
+		PublicSpeciesCount = publicSpeciesCount,
 		Slots = slots,
 	}
 end

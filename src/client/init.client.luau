@@ -83,6 +83,13 @@ end
 
 local OddlingCollectionController = require(oddlingCollectionControllerModule)
 
+local oddlingIndexControllerModule = Controllers:WaitForChild("OddlingIndexController")
+if not oddlingIndexControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.OddlingIndexController must be a ModuleScript.")
+end
+
+local OddlingIndexController = require(oddlingIndexControllerModule)
+
 local devConsoleControllerModule = Controllers:WaitForChild("DevConsoleController")
 if not devConsoleControllerModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Client] Client.Controllers.DevConsoleController must be a ModuleScript.")
@@ -108,6 +115,7 @@ FurnacePodChaseController.Start()
 KineticPodRecoveryController.Start()
 OddityContainmentController.Start()
 OddlingCollectionController.Start()
+OddlingIndexController.Start()
 -- The controller exits immediately outside Studio; the server remains the
 -- actual authorization boundary even when the development UI is visible.
 DevConsoleController.Start()
