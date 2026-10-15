@@ -34,6 +34,62 @@ end
 
 local CraftingController = require(craftingControllerModule)
 
+local activeSalvageControllerModule = Controllers:WaitForChild("ActiveSalvageController")
+if not activeSalvageControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.ActiveSalvageController must be a ModuleScript.")
+end
+
+local ActiveSalvageController = require(activeSalvageControllerModule)
+
+local assemblyControllerModule = Controllers:WaitForChild("AssemblyController")
+if not assemblyControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.AssemblyController must be a ModuleScript.")
+end
+
+local AssemblyController = require(assemblyControllerModule)
+
+local signalDiscoveryControllerModule = Controllers:WaitForChild("SignalDiscoveryController")
+if not signalDiscoveryControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.SignalDiscoveryController must be a ModuleScript.")
+end
+
+local SignalDiscoveryController = require(signalDiscoveryControllerModule)
+
+local furnacePodChaseControllerModule = Controllers:WaitForChild("FurnacePodChaseController")
+if not furnacePodChaseControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.FurnacePodChaseController must be a ModuleScript.")
+end
+
+local FurnacePodChaseController = require(furnacePodChaseControllerModule)
+
+local kineticPodRecoveryControllerModule = Controllers:WaitForChild("KineticPodRecoveryController")
+if not kineticPodRecoveryControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.KineticPodRecoveryController must be a ModuleScript.")
+end
+
+local KineticPodRecoveryController = require(kineticPodRecoveryControllerModule)
+
+local oddityContainmentControllerModule = Controllers:WaitForChild("OddityContainmentController")
+if not oddityContainmentControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.OddityContainmentController must be a ModuleScript.")
+end
+
+local OddityContainmentController = require(oddityContainmentControllerModule)
+
+local oddlingCollectionControllerModule = Controllers:WaitForChild("OddlingCollectionController")
+if not oddlingCollectionControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.OddlingCollectionController must be a ModuleScript.")
+end
+
+local OddlingCollectionController = require(oddlingCollectionControllerModule)
+
+local oddlingIndexControllerModule = Controllers:WaitForChild("OddlingIndexController")
+if not oddlingIndexControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.OddlingIndexController must be a ModuleScript.")
+end
+
+local OddlingIndexController = require(oddlingIndexControllerModule)
+
 local devConsoleControllerModule = Controllers:WaitForChild("DevConsoleController")
 if not devConsoleControllerModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Client] Client.Controllers.DevConsoleController must be a ModuleScript.")
@@ -41,12 +97,28 @@ end
 
 local DevConsoleController = require(devConsoleControllerModule)
 
+local devInspectorControllerModule = Controllers:WaitForChild("DevInspectorController")
+if not devInspectorControllerModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Client] Client.Controllers.DevInspectorController must be a ModuleScript.")
+end
+
+local DevInspectorController = require(devInspectorControllerModule)
+
 -- The client remains presentation-only: it starts a HUD that displays sanitized
 -- server snapshots, but it does not own or mutate authoritative gameplay state.
 HudController.Start()
 CraftingController.Start()
+ActiveSalvageController.Start()
+AssemblyController.Start()
+SignalDiscoveryController.Start()
+FurnacePodChaseController.Start()
+KineticPodRecoveryController.Start()
+OddityContainmentController.Start()
+OddlingCollectionController.Start()
+OddlingIndexController.Start()
 -- The controller exits immediately outside Studio; the server remains the
 -- actual authorization boundary even when the development UI is visible.
 DevConsoleController.Start()
+DevInspectorController.Start()
 
 print(string.format("[%s][Client] Production bootstrap ready (v%s)", GameConstants.PROJECT_NAME, GameConstants.VERTICAL_SLICE_VERSION))

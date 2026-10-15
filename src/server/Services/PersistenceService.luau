@@ -71,36 +71,69 @@ local function createSaveTemplate(): SaveDataV1
 	}
 end
 
--- Normalizes untrusted stored data into schema v1. A future schema newer than
--- this server is rejected to avoid silently overwriting data it cannot understand.
+-- Checks fields that must never be invented by ProfileStore reconciliation.
+-- Missing configured species buckets may still reconcile to zero, but existing
+-- currency, level, schema, and ownership values must already be trustworthy.
+local function validateBeforeReconcile(rawData: any): string?
+	if typeof(rawData) ~= "table" then
+		return "invalid profile root"
+	end
+	if not isNonNegativeSafeInteger(rawData.SchemaVersion) then
+		return "invalid schema version"
+	end
+	if rawData.SchemaVersion > PersistenceConfig.SCHEMA_VERSION then
+		return string.format("unsupported future schema version %d", rawData.SchemaVersion)
+	end
+	if not isNonNegativeSafeInteger(rawData.Scrap)
+		or not isNonNegativeSafeInteger(rawData.Hype)
+		or not isNonNegativeSafeInteger(rawData.WorkshopLevel)
+		or not WorkshopLevels.GetDefinition(rawData.WorkshopLevel)
+		or typeof(rawData.OwnedOddlings) ~= "table"
+	then
+		return "invalid required schema-v1 field"
+	end
+	for speciesId, count in pairs(rawData.OwnedOddlings) do
+		if Oddlings.GetDefinition(speciesId) and not isNonNegativeSafeInteger(count) then
+			return string.format("invalid ownership count for configured species %s", speciesId)
+		end
+	end
+	return nil
+end
+
+-- Validates untrusted stored data before normalizing it into schema v1. ProfileStore
+-- reconciliation supplies missing template fields; invalid existing values fail
+-- closed so this server cannot replace uncertain progress with fresh defaults.
 local function migrateSaveData(rawData: any): (SaveDataV1?, string)
 	if typeof(rawData) ~= "table" then
-		return createSaveTemplate(), "invalid root replaced with schema v1 defaults"
+		return nil, "invalid profile root"
 	end
 
 	local rawVersion = rawData.SchemaVersion
-	if isNonNegativeSafeInteger(rawVersion) and rawVersion > PersistenceConfig.SCHEMA_VERSION then
+	if not isNonNegativeSafeInteger(rawVersion) then
+		return nil, "invalid schema version"
+	end
+	if rawVersion > PersistenceConfig.SCHEMA_VERSION then
 		return nil, string.format("unsupported future schema version %d", rawVersion)
+	end
+	if not isNonNegativeSafeInteger(rawData.Scrap)
+		or not isNonNegativeSafeInteger(rawData.Hype)
+		or not isNonNegativeSafeInteger(rawData.WorkshopLevel)
+		or not WorkshopLevels.GetDefinition(rawData.WorkshopLevel)
+		or typeof(rawData.OwnedOddlings) ~= "table"
+	then
+		return nil, "invalid required schema-v1 field"
 	end
 
 	local migrated = createSaveTemplate()
-	if isNonNegativeSafeInteger(rawData.Scrap) then
-		migrated.Scrap = rawData.Scrap
-	end
-	if isNonNegativeSafeInteger(rawData.Hype) then
-		migrated.Hype = rawData.Hype
-	end
-	if isNonNegativeSafeInteger(rawData.WorkshopLevel) and WorkshopLevels.GetDefinition(rawData.WorkshopLevel) then
-		migrated.WorkshopLevel = rawData.WorkshopLevel
-	end
-
-	if typeof(rawData.OwnedOddlings) == "table" then
-		for speciesId in pairs(migrated.OwnedOddlings) do
-			local count = rawData.OwnedOddlings[speciesId]
-			if isNonNegativeSafeInteger(count) then
-				migrated.OwnedOddlings[speciesId] = count
-			end
+	migrated.Scrap = rawData.Scrap
+	migrated.Hype = rawData.Hype
+	migrated.WorkshopLevel = rawData.WorkshopLevel
+	for speciesId in pairs(migrated.OwnedOddlings) do
+		local count = rawData.OwnedOddlings[speciesId]
+		if not isNonNegativeSafeInteger(count) then
+			return nil, string.format("invalid ownership count for configured species %s", speciesId)
 		end
+		migrated.OwnedOddlings[speciesId] = count
 	end
 
 	return migrated, string.format("normalized to schema v%d", PersistenceConfig.SCHEMA_VERSION)
@@ -108,22 +141,27 @@ end
 
 -- Translates a defensive PlayerState snapshot into the only fields permitted in
 -- persistent schema v1. AssignedPlotId and UnlockedRecipes are excluded by design.
-local function buildSavePayload(snapshot: any): SaveDataV1
-	local payload = createSaveTemplate()
-	payload.Scrap = if isNonNegativeSafeInteger(snapshot.Scrap) then snapshot.Scrap else 0
-	payload.Hype = if isNonNegativeSafeInteger(snapshot.Hype) then snapshot.Hype else 0
-	payload.WorkshopLevel = if isNonNegativeSafeInteger(snapshot.WorkshopLevel)
-		and WorkshopLevels.GetDefinition(snapshot.WorkshopLevel)
-		then snapshot.WorkshopLevel
-		else 1
+local function buildSavePayload(snapshot: any): SaveDataV1?
+	if typeof(snapshot) ~= "table"
+		or not isNonNegativeSafeInteger(snapshot.Scrap)
+		or not isNonNegativeSafeInteger(snapshot.Hype)
+		or not isNonNegativeSafeInteger(snapshot.WorkshopLevel)
+		or not WorkshopLevels.GetDefinition(snapshot.WorkshopLevel)
+		or typeof(snapshot.OwnedOddlings) ~= "table"
+	then
+		return nil
+	end
 
-	if typeof(snapshot.OwnedOddlings) == "table" then
-		for speciesId in pairs(payload.OwnedOddlings) do
-			local count = snapshot.OwnedOddlings[speciesId]
-			if isNonNegativeSafeInteger(count) then
-				payload.OwnedOddlings[speciesId] = count
-			end
+	local payload = createSaveTemplate()
+	payload.Scrap = snapshot.Scrap
+	payload.Hype = snapshot.Hype
+	payload.WorkshopLevel = snapshot.WorkshopLevel
+	for speciesId in pairs(payload.OwnedOddlings) do
+		local count = snapshot.OwnedOddlings[speciesId]
+		if not isNonNegativeSafeInteger(count) then
+			return nil
 		end
+		payload.OwnedOddlings[speciesId] = count
 	end
 
 	return payload
@@ -151,7 +189,13 @@ local function syncProfileData(player: Player, profile: any): boolean
 		return false
 	end
 
-	writeProfileData(profile, buildSavePayload(snapshot))
+	local payload = buildSavePayload(snapshot)
+	if not payload then
+		warn(string.format("[ODDWORKS][Persistence] Refused to synchronize invalid PlayerState for %s (%d).", player.Name, player.UserId))
+		return false
+	end
+
+	writeProfileData(profile, payload)
 	return true
 end
 
@@ -236,6 +280,16 @@ local function loadPlayer(player: Player)
 		return
 	end
 
+	local preReconcileFailure = validateBeforeReconcile(profile.Data)
+	if preReconcileFailure then
+		statuses[player] = "Failed"
+		warn(string.format("[ODDWORKS][Persistence] Rejected %s profile: %s.", player.Name, preReconcileFailure))
+		profile:EndSession()
+		if player.Parent == Players then
+			player:Kick(PROFILE_LOAD_FAILURE_MESSAGE)
+		end
+		return
+	end
 	profile:AddUserId(player.UserId)
 	profile:Reconcile()
 	local saveData, migrationResult = migrateSaveData(profile.Data)
@@ -243,7 +297,9 @@ local function loadPlayer(player: Player)
 		statuses[player] = "Failed"
 		warn(string.format("[ODDWORKS][Persistence] Rejected %s profile: %s.", player.Name, migrationResult))
 		profile:EndSession()
-		player:Kick(PROFILE_LOAD_FAILURE_MESSAGE)
+		if player.Parent == Players then
+			player:Kick(PROFILE_LOAD_FAILURE_MESSAGE)
+		end
 		return
 	end
 	writeProfileData(profile, saveData)
@@ -275,7 +331,9 @@ local function loadPlayer(player: Player)
 		profiles[player] = nil
 		statuses[player] = "Failed"
 		profile:EndSession()
-		player:Kick(PROFILE_LOAD_FAILURE_MESSAGE)
+		if player.Parent == Players then
+			player:Kick(PROFILE_LOAD_FAILURE_MESSAGE)
+		end
 		return
 	end
 

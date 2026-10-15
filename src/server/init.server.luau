@@ -28,6 +28,13 @@ end
 
 local PlayerStateService = require(playerStateServiceModule)
 
+local modularPrototypeStateServiceModule = Services:WaitForChild("ModularPrototypeStateService")
+if not modularPrototypeStateServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.ModularPrototypeStateService must be a ModuleScript.")
+end
+
+local ModularPrototypeStateService = require(modularPrototypeStateServiceModule)
+
 local persistenceServiceModule = Services:WaitForChild("PersistenceService")
 if not persistenceServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.PersistenceService must be a ModuleScript.")
@@ -56,12 +63,40 @@ end
 
 local StateReplicationService = require(stateReplicationServiceModule)
 
+local modularPrototypeReplicationServiceModule = Services:WaitForChild("ModularPrototypeReplicationService")
+if not modularPrototypeReplicationServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.ModularPrototypeReplicationService must be a ModuleScript.")
+end
+
+local ModularPrototypeReplicationService = require(modularPrototypeReplicationServiceModule)
+
 local salvageServiceModule = Services:WaitForChild("SalvageService")
 if not salvageServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.SalvageService must be a ModuleScript.")
 end
 
 local SalvageService = require(salvageServiceModule)
+
+local outerYardSalvageServiceModule = Services:WaitForChild("OuterYardSalvageService")
+if not outerYardSalvageServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.OuterYardSalvageService must be a ModuleScript.")
+end
+
+local OuterYardSalvageService = require(outerYardSalvageServiceModule)
+
+local deepBayServiceModule = Services:WaitForChild("DeepBayService")
+if not deepBayServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.DeepBayService must be a ModuleScript.")
+end
+
+local DeepBayService = require(deepBayServiceModule)
+
+local activeSalvageEncounterServiceModule = Services:WaitForChild("ActiveSalvageEncounterService")
+if not activeSalvageEncounterServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.ActiveSalvageEncounterService must be a ModuleScript.")
+end
+
+local ActiveSalvageEncounterService = require(activeSalvageEncounterServiceModule)
 
 local craftingServiceModule = Services:WaitForChild("CraftingService")
 if not craftingServiceModule:IsA("ModuleScript") then
@@ -77,6 +112,20 @@ end
 
 local OddlingDisplayService = require(oddlingDisplayServiceModule)
 
+local oddlingCollectionServiceModule = Services:WaitForChild("OddlingCollectionService")
+if not oddlingCollectionServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.OddlingCollectionService must be a ModuleScript.")
+end
+
+local OddlingCollectionService = require(oddlingCollectionServiceModule)
+
+local firstTimeExperienceServiceModule = Services:WaitForChild("FirstTimeExperienceService")
+if not firstTimeExperienceServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.FirstTimeExperienceService must be a ModuleScript.")
+end
+
+local FirstTimeExperienceService = require(firstTimeExperienceServiceModule)
+
 local hypeServiceModule = Services:WaitForChild("HypeService")
 if not hypeServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.HypeService must be a ModuleScript.")
@@ -91,12 +140,75 @@ end
 
 local WorkshopUpgradeService = require(workshopUpgradeServiceModule)
 
+local workshopBankingServiceModule = Services:WaitForChild("WorkshopBankingService")
+if not workshopBankingServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.WorkshopBankingService must be a ModuleScript.")
+end
+
+local WorkshopBankingService = require(workshopBankingServiceModule)
+
+local prototypeAssemblyServiceModule = Services:WaitForChild("PrototypeAssemblyService")
+if not prototypeAssemblyServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.PrototypeAssemblyService must be a ModuleScript.")
+end
+
+local PrototypeAssemblyService = require(prototypeAssemblyServiceModule)
+
+local prototypeConstructRuntimeServiceModule = Services:WaitForChild("PrototypeConstructRuntimeService")
+if not prototypeConstructRuntimeServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.PrototypeConstructRuntimeService must be a ModuleScript.")
+end
+
+local PrototypeConstructRuntimeService = require(prototypeConstructRuntimeServiceModule)
+
+local signatureDiscoveryServiceModule = Services:WaitForChild("SignatureDiscoveryService")
+if not signatureDiscoveryServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.SignatureDiscoveryService must be a ModuleScript.")
+end
+
+local SignatureDiscoveryService = require(signatureDiscoveryServiceModule)
+
+local recoveryCarrierRegistryModule = Services:WaitForChild("RecoveryCarrierRegistry")
+if not recoveryCarrierRegistryModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.RecoveryCarrierRegistry must be a ModuleScript.")
+end
+
+local RecoveryCarrierRegistry = require(recoveryCarrierRegistryModule)
+
+local furnacePodChaseServiceModule = Services:WaitForChild("FurnacePodChaseService")
+if not furnacePodChaseServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.FurnacePodChaseService must be a ModuleScript.")
+end
+
+local FurnacePodChaseService = require(furnacePodChaseServiceModule)
+
+local kineticPodRecoveryServiceModule = Services:WaitForChild("KineticPodRecoveryService")
+if not kineticPodRecoveryServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.KineticPodRecoveryService must be a ModuleScript.")
+end
+
+local KineticPodRecoveryService = require(kineticPodRecoveryServiceModule)
+
+local oddityContainmentServiceModule = Services:WaitForChild("OddityContainmentService")
+if not oddityContainmentServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.OddityContainmentService must be a ModuleScript.")
+end
+
+local OddityContainmentService = require(oddityContainmentServiceModule)
+
 local devHarnessServiceModule = Services:WaitForChild("DevHarnessService")
 if not devHarnessServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.DevHarnessService must be a ModuleScript.")
 end
 
 local DevHarnessService = require(devHarnessServiceModule)
+
+local devInspectorServiceModule = Services:WaitForChild("DevInspectorService")
+if not devInspectorServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.DevInspectorService must be a ModuleScript.")
+end
+
+local DevInspectorService = require(devInspectorServiceModule)
 
 -- The server verifies that the persistent world exists instead of creating it
 -- here so Studio/Rojo remain the source of truth for this static bootstrap map.
@@ -131,19 +243,37 @@ requireChildOfClass(workshopPlots, "Plot01", "Part")
 requireChildOfClass(workshopPlots, "Plot02", "Part")
 
 PlayerStateService.Start()
+-- Experimental state subscribes before persistence establishes any ready player,
+-- preserving load-before-gameplay ordering without entering schema v1.
+ModularPrototypeStateService.Start()
 ProgressionService.Start()
 StateReplicationService.Start()
+ModularPrototypeReplicationService.Start()
 WorkshopService.Start()
+FirstTimeExperienceService.Start()
+OddlingCollectionService.Start()
 OddlingDisplayService.Start()
 HypeService.Start()
 WorkshopUpgradeService.Start()
+WorkshopBankingService.Start()
+PrototypeAssemblyService.Start()
+PrototypeConstructRuntimeService.Start()
+SignatureDiscoveryService.Start()
+RecoveryCarrierRegistry.Start()
+FurnacePodChaseService.Start()
+KineticPodRecoveryService.Start()
+OddityContainmentService.Start()
 SalvageService.Start()
+OuterYardSalvageService.Start()
+DeepBayService.Start()
+ActiveSalvageEncounterService.Start()
 CraftingService.Start()
 -- Persistence starts after every state consumer has registered its listeners.
 -- PlayerState remains absent until a profile session has loaded successfully.
 PersistenceService.Start()
--- Developer tooling starts last so its commands can call fully initialized
--- production APIs. Its own server-side gate keeps it inert outside Studio.
+-- Developer tooling starts after production APIs are initialized. Each tool
+-- independently gates its presentation and server actions to Studio.
 DevHarnessService.Start()
+DevInspectorService.Start()
 
 print(string.format("[%s][Server] Production bootstrap ready (v%s)", GameConstants.PROJECT_NAME, GameConstants.VERTICAL_SLICE_VERSION))

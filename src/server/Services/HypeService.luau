@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local Services = script.Parent
 local ServerRoot = assert(Services.Parent, "[ODDWORKS][HypeService] Services folder must have a parent.")
 local Config = ServerRoot:WaitForChild("Config")
+local FirstTimeExperienceService = require(Services:WaitForChild("FirstTimeExperienceService"))
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
 local OddlingDisplayService = require(Services:WaitForChild("OddlingDisplayService"))
 
@@ -64,8 +65,8 @@ local function loadProductionDefinitions(): { OddlingDefinition }
 	return definitions
 end
 
--- Evaluates one player from server-created display counts at the current tick.
--- Zero displayed models produce nothing even when authoritative ownership is higher.
+-- Evaluates one player from the server-authoritative display loadout. Missing
+-- physical presentation never changes production, while collection-only copies produce nothing.
 local function evaluatePlayer(player: Player, now: number)
 	if not PlayerStateService.HasState(player) then
 		nextProductionTimes[player] = nil
@@ -110,6 +111,7 @@ local function evaluatePlayer(player: Player, now: number)
 	end
 
 	if PlayerStateService.AddHype(player, totalAward) then
+		FirstTimeExperienceService.RecordHypeProduced(player, totalAward)
 		print(
 			string.format(
 				"[ODDWORKS][HypeService] %s +%d Hype from displayed Oddlings (%s).",

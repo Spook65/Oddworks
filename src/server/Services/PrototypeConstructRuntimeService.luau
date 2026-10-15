@@ -1,0 +1,1093 @@
+--!strict
+
+local Players = game:GetService("Players")
+local ServerStorage = game:GetService("ServerStorage")
+local Workspace = game:GetService("Workspace")
+
+local Services = script.Parent
+local ServerRoot = assert(Services.Parent, "[ODDWORKS][PrototypeRuntime] Services folder must have a parent.")
+local Config = ServerRoot:WaitForChild("Config")
+local Components = require(Config:WaitForChild("Components"))
+local ModularPrototypeStateService = require(Services:WaitForChild("ModularPrototypeStateService"))
+local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
+local WorkshopService = require(Services:WaitForChild("WorkshopService"))
+
+type ComponentSelection = {
+	ComponentId: string,
+	Rarity: string,
+}
+
+type PrototypeConstruct = {
+	FrameId: string,
+	Head: ComponentSelection,
+	Arm: ComponentSelection,
+	Legs: ComponentSelection,
+}
+
+type ComponentDefinition = {
+	ComponentId: string,
+	DisplayName: string,
+	Slot: string,
+	ArtModel: string,
+	CompatibleFrames: { [string]: boolean },
+}
+
+type EquipmentMountContract = {
+	EquipmentRootName: string,
+	SegmentName: string,
+	AnchorName: string,
+	JointName: string,
+	AnchorCFrame: CFrame,
+}
+
+type RoleContract = {
+	Role: string,
+	Mounts: { EquipmentMountContract },
+}
+
+local FRAME_ID = "SmallBiped_v1"
+local FRAME_TEMPLATE_NAME = "SmallBiped_v1_Frame"
+local DISPLAY_MARKER_NAME = "PrototypeConstructDisplay"
+local RUNTIME_ROOT_NAME = "ODDWORKSRuntime"
+local RUNTIME_FOLDER_NAME = "PrototypeConstructs"
+local CONSTRUCT_MODEL_NAME = "SmallBiped_v1"
+local ROOT_PART_NAME = "RootPart"
+local MOUNT_ATTACHMENT_NAME = "MountAttachment"
+local PRESENTATION_VERSION = "AuthoredEquipment_v1"
+local ROOT_GROUND_OFFSET = 3
+local AUDIT_INTERVAL_SECONDS = 2
+local TRANSFORM_EPSILON = 0.0001
+
+local ROLE_CONTRACTS: { RoleContract } = {
+	{
+		Role = "Head",
+		Mounts = {
+			{
+				EquipmentRootName = "HeadEquipmentRoot",
+				SegmentName = "HeadBase",
+				AnchorName = "HeadEquipmentAnchor",
+				JointName = "HeadEquipmentJoint",
+				AnchorCFrame = CFrame.new(0, 0, -0.825),
+			},
+		},
+	},
+	{
+		Role = "Arm",
+		Mounts = {
+			{
+				EquipmentRootName = "LeftArmEquipmentRoot",
+				SegmentName = "LeftArm",
+				AnchorName = "LeftArmEquipmentAnchor",
+				JointName = "LeftArmEquipmentJoint",
+				AnchorCFrame = CFrame.new(0, -0.35, -0.375),
+			},
+			{
+				EquipmentRootName = "RightArmEquipmentRoot",
+				SegmentName = "RightArm",
+				AnchorName = "RightArmEquipmentAnchor",
+				JointName = "RightArmEquipmentJoint",
+				AnchorCFrame = CFrame.new(0, -0.35, -0.375),
+			},
+		},
+	},
+	{
+		Role = "Legs",
+		Mounts = {
+			{
+				EquipmentRootName = "LeftLegEquipmentRoot",
+				SegmentName = "LeftLeg",
+				AnchorName = "LeftLegEquipmentAnchor",
+				JointName = "LeftLegEquipmentJoint",
+				AnchorCFrame = CFrame.new(0, -0.45, -0.45),
+			},
+			{
+				EquipmentRootName = "RightLegEquipmentRoot",
+				SegmentName = "RightLeg",
+				AnchorName = "RightLegEquipmentAnchor",
+				JointName = "RightLegEquipmentJoint",
+				AnchorCFrame = CFrame.new(0, -0.45, -0.45),
+			},
+		},
+	},
+}
+
+local PrototypeConstructRuntimeService = {}
+
+-- Runtime Models are disposable projections. All authority remains in
+-- ModularPrototypeStateService's copied PrototypeConstruct record.
+local runtimeConstructsFolder: Folder? = nil
+local pendingReconciliations: { [Player]: boolean } = {}
+local suppressRecovery: { [Player]: boolean } = {}
+local modelConnections: { [Player]: { RBXScriptConnection } } = {}
+local watchedRuntimeModels: { [Player]: Model } = {}
+local containerConnections: { [Player]: RBXScriptConnection } = {}
+local recoveryGenerations: { [Player]: number } = {}
+local warningKeys: { [string]: boolean } = {}
+local started = false
+
+local function warnOnce(key: string, message: string)
+	if warningKeys[key] then
+		return
+	end
+
+	warningKeys[key] = true
+	warn(message)
+end
+
+local function clearWarning(key: string)
+	warningKeys[key] = nil
+end
+
+local function getOrCreateFolder(parent: Instance, childName: string): Folder?
+	local existing = parent:FindFirstChild(childName)
+	if existing then
+		if existing:IsA("Folder") then
+			return existing
+		end
+
+	warn(string.format("[ODDWORKS][PrototypeRuntime] %s must be a Folder.", existing:GetFullName()))
+		return nil
+	end
+
+	local folder = Instance.new("Folder")
+	folder.Name = childName
+	folder.Parent = parent
+	return folder
+end
+
+local function containsExecutableContent(instance: Instance): boolean
+	for _, descendant in ipairs(instance:GetDescendants()) do
+		if descendant:IsA("LuaSourceContainer") then
+			return true
+		end
+	end
+	return false
+end
+
+local function cframesMatch(left: CFrame, right: CFrame): boolean
+	local leftComponents = { left:GetComponents() }
+	local rightComponents = { right:GetComponents() }
+	for index = 1, #leftComponents do
+		if math.abs(leftComponents[index] - rightComponents[index]) > TRANSFORM_EPSILON then
+			return false
+		end
+	end
+	return true
+end
+
+local function countBaseParts(instance: Instance): number
+	local count = if instance:IsA("BasePart") then 1 else 0
+	for _, descendant in ipairs(instance:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			count += 1
+		end
+	end
+	return count
+end
+
+local function countDirectBaseParts(instance: Instance): number
+	local count = 0
+	for _, child in ipairs(instance:GetChildren()) do
+		if child:IsA("BasePart") then
+			count += 1
+		end
+	end
+	return count
+end
+
+local function getPlayerContainerName(player: Player): string
+	return string.format("Player_%d", player.UserId)
+end
+
+local function getConstructSelection(construct: PrototypeConstruct, role: string): ComponentSelection
+	if role == "Head" then
+		return construct.Head
+	elseif role == "Arm" then
+		return construct.Arm
+	end
+	return construct.Legs
+end
+
+local function buildFingerprint(construct: PrototypeConstruct): string
+	return table.concat({
+		construct.FrameId,
+		construct.Head.ComponentId,
+		construct.Head.Rarity,
+		construct.Arm.ComponentId,
+		construct.Arm.Rarity,
+		construct.Legs.ComponentId,
+		construct.Legs.Rarity,
+	}, "|")
+end
+
+local function getConstructTemplatesFolder(): Folder?
+	local assets = ServerStorage:FindFirstChild("ODDWORKSAssets")
+	local constructs = if assets then assets:FindFirstChild("Constructs") else nil
+	if not constructs or not constructs:IsA("Folder") then
+		warnOnce(
+			"ConstructsFolder",
+			"[ODDWORKS][PrototypeRuntime] Missing ServerStorage.ODDWORKSAssets.Constructs folder."
+		)
+		return nil
+	end
+
+	clearWarning("ConstructsFolder")
+	return constructs
+end
+
+local function validateFrameTemplate(candidate: Instance?): Model?
+	if not candidate or not candidate:IsA("Model") then
+		warnOnce(
+			"FrameTemplate",
+			string.format(
+				"[ODDWORKS][PrototypeRuntime] Missing Model ServerStorage.ODDWORKSAssets.Constructs.%s.",
+				FRAME_TEMPLATE_NAME
+			)
+		)
+		return nil
+	end
+	if containsExecutableContent(candidate) then
+		warnOnce("FrameTemplate", "[ODDWORKS][PrototypeRuntime] Frame template contains executable content and was rejected.")
+		return nil
+	end
+
+	local rootPart = candidate:FindFirstChild(ROOT_PART_NAME)
+	if not rootPart or not rootPart:IsA("BasePart") then
+		warnOnce("FrameTemplate", "[ODDWORKS][PrototypeRuntime] Frame template is missing direct RootPart.")
+		return nil
+	end
+
+	for _, roleContract in ipairs(ROLE_CONTRACTS) do
+		for _, mountContract in ipairs(roleContract.Mounts) do
+			local segment = candidate:FindFirstChild(mountContract.SegmentName)
+			local anchor = if segment then segment:FindFirstChild(mountContract.AnchorName) else nil
+			if not segment
+				or not segment:IsA("BasePart")
+				or segment.Parent ~= candidate
+				or not anchor
+				or not anchor:IsA("Attachment")
+				or anchor.Parent ~= segment
+				or not cframesMatch(anchor.CFrame, mountContract.AnchorCFrame)
+			then
+				warnOnce(
+					"FrameTemplate",
+					string.format(
+						"[ODDWORKS][PrototypeRuntime] Frame template has invalid %s.%s.",
+						mountContract.SegmentName,
+						mountContract.AnchorName
+					)
+				)
+				return nil
+			end
+		end
+	end
+
+	local hasVisibleGeometry = false
+	for _, descendant in ipairs(candidate:GetDescendants()) do
+		if descendant:IsA("BasePart") and descendant ~= rootPart and descendant.Transparency < 1 then
+			hasVisibleGeometry = true
+			break
+		end
+	end
+	if not hasVisibleGeometry then
+		warnOnce("FrameTemplate", "[ODDWORKS][PrototypeRuntime] Frame template has no visible chassis geometry.")
+		return nil
+	end
+
+	clearWarning("FrameTemplate")
+	return candidate
+end
+
+local function validateModuleTemplate(
+	candidate: Instance?,
+	definition: ComponentDefinition,
+	roleContract: RoleContract
+): Model?
+	local warningKey = string.format("ModuleTemplate:%s", definition.ComponentId)
+	if not candidate or not candidate:IsA("Model") then
+		warnOnce(
+			warningKey,
+			string.format(
+				"[ODDWORKS][PrototypeRuntime] Missing module template Components.%s for %s.",
+				definition.ArtModel,
+				definition.ComponentId
+			)
+		)
+		return nil
+	end
+	if containsExecutableContent(candidate) then
+		warnOnce(
+			warningKey,
+			string.format("[ODDWORKS][PrototypeRuntime] Module template %s contains executable content.", definition.ArtModel)
+		)
+		return nil
+	end
+
+	local equipmentRoots: { [BasePart]: boolean } = {}
+	for _, mountContract in ipairs(roleContract.Mounts) do
+		local equipmentRoot = candidate:FindFirstChild(mountContract.EquipmentRootName)
+		local mountAttachment = if equipmentRoot then equipmentRoot:FindFirstChild(MOUNT_ATTACHMENT_NAME) else nil
+		if not equipmentRoot
+			or not equipmentRoot:IsA("BasePart")
+			or equipmentRoot.Parent ~= candidate
+			or not mountAttachment
+			or not mountAttachment:IsA("Attachment")
+			or mountAttachment.Parent ~= equipmentRoot
+			or not cframesMatch(mountAttachment.CFrame, CFrame.identity)
+			or equipmentRoot.Transparency < 1
+		then
+			warnOnce(
+				warningKey,
+				string.format(
+					"[ODDWORKS][PrototypeRuntime] Module template %s has invalid %s/MountAttachment.",
+					definition.ArtModel,
+					mountContract.EquipmentRootName
+				)
+			)
+			return nil
+		end
+		equipmentRoots[equipmentRoot] = true
+
+		local hasVisibleOwnedGeometry = false
+		for _, descendant in ipairs(equipmentRoot:GetDescendants()) do
+			if descendant:IsA("BasePart") and descendant.Transparency < 1 then
+				hasVisibleOwnedGeometry = true
+				break
+			end
+		end
+		if not hasVisibleOwnedGeometry then
+			warnOnce(
+				warningKey,
+				string.format(
+					"[ODDWORKS][PrototypeRuntime] Module template %s has no visible geometry beneath %s.",
+					definition.ArtModel,
+					mountContract.EquipmentRootName
+				)
+			)
+			return nil
+		end
+	end
+
+	-- Explorer hierarchy is not a physical connection, but it defines which
+	-- equipment root owns each primitive. Reject stray sibling geometry so the
+	-- builder can weld every visible part without guessing from names.
+	for _, descendant in ipairs(candidate:GetDescendants()) do
+		if descendant:IsA("BasePart") and not equipmentRoots[descendant] then
+			local ancestor = descendant.Parent
+			local owningRoot: BasePart? = nil
+			while ancestor and ancestor ~= candidate do
+				if ancestor:IsA("BasePart") and equipmentRoots[ancestor] then
+					owningRoot = ancestor
+					break
+				end
+				ancestor = ancestor.Parent
+			end
+			if not owningRoot then
+				warnOnce(
+					warningKey,
+					string.format(
+						"[ODDWORKS][PrototypeRuntime] Module template %s has unowned BasePart %s outside an equipment root.",
+						definition.ArtModel,
+						descendant.Name
+					)
+				)
+				return nil
+			end
+		end
+	end
+
+	if countBaseParts(candidate) < #roleContract.Mounts then
+		warnOnce(
+			warningKey,
+			string.format("[ODDWORKS][PrototypeRuntime] Module template %s has no visible geometry.", definition.ArtModel)
+		)
+		return nil
+	end
+
+	clearWarning(warningKey)
+	return candidate
+end
+
+local function resolveTemplates(construct: PrototypeConstruct): (Model?, { [string]: Model }?)
+	if construct.FrameId ~= FRAME_ID then
+		warnOnce(
+			string.format("Frame:%s", construct.FrameId),
+			string.format("[ODDWORKS][PrototypeRuntime] Unsupported frame %s.", construct.FrameId)
+		)
+		return nil, nil
+	end
+
+	local constructsFolder = getConstructTemplatesFolder()
+	if not constructsFolder then
+		return nil, nil
+	end
+	local frameTemplate = validateFrameTemplate(constructsFolder:FindFirstChild(FRAME_TEMPLATE_NAME))
+	local componentsFolder = constructsFolder:FindFirstChild("Components")
+	if not componentsFolder or not componentsFolder:IsA("Folder") then
+		warnOnce("ComponentsFolder", "[ODDWORKS][PrototypeRuntime] Missing Constructs.Components template folder.")
+		return nil, nil
+	end
+	clearWarning("ComponentsFolder")
+
+	local moduleTemplates: { [string]: Model } = {}
+	for _, roleContract in ipairs(ROLE_CONTRACTS) do
+		local selection = getConstructSelection(construct, roleContract.Role)
+		local definition = Components.GetDefinition(selection.ComponentId) :: ComponentDefinition?
+		if not definition
+			or definition.Slot ~= roleContract.Role
+			or not definition.CompatibleFrames[FRAME_ID]
+			or not Components.IsValidRarity(selection.Rarity)
+		then
+			warnOnce(
+				string.format("Selection:%s", roleContract.Role),
+				string.format("[ODDWORKS][PrototypeRuntime] Invalid authoritative %s selection.", roleContract.Role)
+			)
+			return nil, nil
+		end
+		clearWarning(string.format("Selection:%s", roleContract.Role))
+
+		local template = validateModuleTemplate(
+			componentsFolder:FindFirstChild(definition.ArtModel),
+			definition,
+			roleContract
+		)
+		if not template then
+			return nil, nil
+		end
+		moduleTemplates[roleContract.Role] = template
+	end
+
+	return frameTemplate, moduleTemplates
+end
+
+local function getDisplayMarker(plot: BasePart): (CFrame?, string?)
+	local marker = plot:FindFirstChild(DISPLAY_MARKER_NAME)
+	if marker and marker:IsA("BasePart") then
+		return marker.CFrame, plot.Name
+	elseif marker and marker:IsA("Attachment") then
+		return marker.WorldCFrame, plot.Name
+	end
+
+	warnOnce(
+		string.format("Marker:%s", plot.Name),
+		string.format("[ODDWORKS][PrototypeRuntime] %s is missing %s.", plot:GetFullName(), DISPLAY_MARKER_NAME)
+	)
+	return nil, nil
+end
+
+local function getTargetRootCFrame(markerCFrame: CFrame): CFrame
+	-- The marker is the standing surface. The frozen frame root is exactly three
+	-- studs above it because the root-local ground plane is Y = -3.
+	return markerCFrame * CFrame.new(0, ROOT_GROUND_OFFSET, 0)
+end
+
+local function setInertPartPhysics(part: BasePart, anchored: boolean)
+	part.Anchored = anchored
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.Massless = true
+	part.CastShadow = part.Transparency < 1
+end
+
+local function weldVisibleGeometry(model: Model, rootPart: BasePart)
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") and descendant ~= rootPart then
+			setInertPartPhysics(descendant, false)
+			local weld = Instance.new("WeldConstraint")
+			weld.Name = string.format("%sWeld", descendant.Name)
+			weld.Part0 = rootPart
+			weld.Part1 = descendant
+			weld.Parent = rootPart
+		end
+	end
+end
+
+local function placeAndWeldEquipment(equipmentRoot: BasePart, targetCFrame: CFrame)
+	local relativeCFrames: { [BasePart]: CFrame } = {}
+	for _, descendant in ipairs(equipmentRoot:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			relativeCFrames[descendant] = equipmentRoot.CFrame:ToObjectSpace(descendant.CFrame)
+		end
+	end
+
+	equipmentRoot.CFrame = targetCFrame
+	setInertPartPhysics(equipmentRoot, false)
+	for part, relativeCFrame in pairs(relativeCFrames) do
+		part.CFrame = targetCFrame * relativeCFrame
+		setInertPartPhysics(part, false)
+		local weld = Instance.new("WeldConstraint")
+		weld.Name = string.format("%sWeld", part.Name)
+		weld.Part0 = equipmentRoot
+		weld.Part1 = part
+		weld.Parent = equipmentRoot
+	end
+end
+
+local function hasWeldBetween(container: Instance, firstPart: BasePart, secondPart: BasePart): boolean
+	for _, child in ipairs(container:GetChildren()) do
+		if child:IsA("WeldConstraint")
+			and ((child.Part0 == firstPart and child.Part1 == secondPart)
+				or (child.Part0 == secondPart and child.Part1 == firstPart))
+		then
+			return true
+		end
+	end
+	return false
+end
+
+local function hasCompleteEquipmentWelds(equipmentRoot: BasePart): boolean
+	for _, descendant in ipairs(equipmentRoot:GetDescendants()) do
+		if descendant:IsA("BasePart")
+			and (descendant.Anchored or not hasWeldBetween(equipmentRoot, equipmentRoot, descendant))
+		then
+			return false
+		end
+	end
+	return not equipmentRoot.Anchored
+end
+
+local function hasCompleteBaseWelds(model: Model, rootPart: BasePart): boolean
+	for _, child in ipairs(model:GetChildren()) do
+		if child:IsA("BasePart")
+			and child ~= rootPart
+			and (child.Anchored or not hasWeldBetween(rootPart, rootPart, child))
+		then
+			return false
+		end
+	end
+	return true
+end
+
+local function isOneConnectedAssembly(model: Model, rootPart: BasePart): boolean
+	local connectedParts: { [BasePart]: boolean } = {
+		[rootPart] = true,
+	}
+	for _, connectedPart in ipairs(rootPart:GetConnectedParts(true)) do
+		connectedParts[connectedPart] = true
+	end
+
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") and not connectedParts[descendant] then
+			return false
+		end
+	end
+	return true
+end
+
+local function buildRuntimeModel(
+	player: Player,
+	construct: PrototypeConstruct,
+	frameTemplate: Model,
+	moduleTemplates: { [string]: Model },
+	targetRootCFrame: CFrame,
+	plotId: string
+): Model?
+	local frame = frameTemplate:Clone()
+	frame.Name = CONSTRUCT_MODEL_NAME
+
+	local rootPart = frame:FindFirstChild(ROOT_PART_NAME)
+	if not rootPart or not rootPart:IsA("BasePart") then
+		frame:Destroy()
+		return nil
+	end
+	frame.PrimaryPart = rootPart
+	setInertPartPhysics(rootPart, true)
+	frame:PivotTo(targetRootCFrame)
+	weldVisibleGeometry(frame, rootPart)
+	frame:SetAttribute("PresentationVersion", PRESENTATION_VERSION)
+	frame:SetAttribute("BasePartCount", countDirectBaseParts(frame))
+
+	for _, roleContract in ipairs(ROLE_CONTRACTS) do
+		local selection = getConstructSelection(construct, roleContract.Role)
+		local moduleTemplate = moduleTemplates[roleContract.Role]
+		if not moduleTemplate then
+			frame:Destroy()
+			return nil
+		end
+
+		local module = moduleTemplate:Clone()
+		module.Name = roleContract.Role
+		module:SetAttribute("Role", roleContract.Role)
+		module:SetAttribute("ComponentId", selection.ComponentId)
+		module:SetAttribute("Rarity", selection.Rarity)
+		module:SetAttribute("TemplatePartCount", countBaseParts(moduleTemplate))
+		module.Parent = frame
+
+		for _, mountContract in ipairs(roleContract.Mounts) do
+			local segment = frame:FindFirstChild(mountContract.SegmentName)
+			local anchor = if segment then segment:FindFirstChild(mountContract.AnchorName) else nil
+			local equipmentRoot = module:FindFirstChild(mountContract.EquipmentRootName)
+			local mountAttachment = if equipmentRoot then equipmentRoot:FindFirstChild(MOUNT_ATTACHMENT_NAME) else nil
+			if not segment
+				or not segment:IsA("BasePart")
+				or not anchor
+				or not anchor:IsA("Attachment")
+				or not equipmentRoot
+				or not equipmentRoot:IsA("BasePart")
+				or not mountAttachment
+				or not mountAttachment:IsA("Attachment")
+			then
+				module:Destroy()
+				frame:Destroy()
+				return nil
+			end
+
+			placeAndWeldEquipment(
+				equipmentRoot,
+				segment.CFrame * anchor.CFrame * mountAttachment.CFrame:Inverse()
+			)
+
+			local motor = Instance.new("Motor6D")
+			motor.Name = mountContract.JointName
+			motor.Part0 = segment
+			motor.Part1 = equipmentRoot
+			motor.C0 = anchor.CFrame
+			motor.C1 = mountAttachment.CFrame
+			motor.Parent = segment
+		end
+	end
+
+	if not hasCompleteBaseWelds(frame, rootPart) then
+		frame:Destroy()
+		return nil
+	end
+	for _, roleContract in ipairs(ROLE_CONTRACTS) do
+		local module = frame:FindFirstChild(roleContract.Role)
+		if not module or not module:IsA("Model") then
+			frame:Destroy()
+			return nil
+		end
+		for _, mountContract in ipairs(roleContract.Mounts) do
+			local equipmentRoot = module:FindFirstChild(mountContract.EquipmentRootName)
+			if not equipmentRoot
+				or not equipmentRoot:IsA("BasePart")
+				or not hasCompleteEquipmentWelds(equipmentRoot)
+			then
+				frame:Destroy()
+				return nil
+			end
+		end
+	end
+
+	frame:SetAttribute("OwnerUserId", player.UserId)
+	frame:SetAttribute("FrameId", construct.FrameId)
+	frame:SetAttribute("PlotId", plotId)
+	frame:SetAttribute("ConstructFingerprint", buildFingerprint(construct))
+	return frame
+end
+
+local function validateRuntimeModule(
+	model: Model,
+	construct: PrototypeConstruct,
+	roleContract: RoleContract,
+	moduleTemplate: Model
+): boolean
+	local selection = getConstructSelection(construct, roleContract.Role)
+	local module = model:FindFirstChild(roleContract.Role)
+	if not module
+		or not module:IsA("Model")
+		or module.Parent ~= model
+		or module:GetAttribute("Role") ~= roleContract.Role
+		or module:GetAttribute("ComponentId") ~= selection.ComponentId
+		or module:GetAttribute("Rarity") ~= selection.Rarity
+		or module:GetAttribute("TemplatePartCount") ~= countBaseParts(moduleTemplate)
+		or countBaseParts(module) ~= countBaseParts(moduleTemplate)
+	then
+		return false
+	end
+
+	for _, mountContract in ipairs(roleContract.Mounts) do
+		local segment = model:FindFirstChild(mountContract.SegmentName)
+		local anchor = if segment then segment:FindFirstChild(mountContract.AnchorName) else nil
+		local equipmentRoot = module:FindFirstChild(mountContract.EquipmentRootName)
+		local mountAttachment = if equipmentRoot then equipmentRoot:FindFirstChild(MOUNT_ATTACHMENT_NAME) else nil
+		local joint = if segment then segment:FindFirstChild(mountContract.JointName) else nil
+		if not segment
+			or not segment:IsA("BasePart")
+			or not anchor
+			or not anchor:IsA("Attachment")
+			or not equipmentRoot
+			or not equipmentRoot:IsA("BasePart")
+			or equipmentRoot.Parent ~= module
+			or equipmentRoot.Transparency < 1
+			or not mountAttachment
+			or not mountAttachment:IsA("Attachment")
+			or not joint
+			or not joint:IsA("Motor6D")
+		then
+			return false
+		end
+		if not cframesMatch(anchor.CFrame, mountContract.AnchorCFrame)
+			or not cframesMatch(mountAttachment.CFrame, CFrame.identity)
+			or joint.Part0 ~= segment
+			or joint.Part1 ~= equipmentRoot
+			or not cframesMatch(joint.C0, anchor.CFrame)
+			or not cframesMatch(joint.C1, mountAttachment.CFrame)
+			or not cframesMatch(segment.CFrame * joint.C0, equipmentRoot.CFrame * joint.C1)
+		then
+			return false
+		end
+		if not hasCompleteEquipmentWelds(equipmentRoot) then
+			return false
+		end
+	end
+	return true
+end
+
+local function isRuntimeModelValid(
+	player: Player,
+	model: Model,
+	construct: PrototypeConstruct,
+	targetRootCFrame: CFrame,
+	plotId: string,
+	frameTemplate: Model,
+	moduleTemplates: { [string]: Model }
+): boolean
+	if model.Name ~= CONSTRUCT_MODEL_NAME
+		or model:GetAttribute("OwnerUserId") ~= player.UserId
+		or model:GetAttribute("FrameId") ~= construct.FrameId
+		or model:GetAttribute("PlotId") ~= plotId
+		or model:GetAttribute("ConstructFingerprint") ~= buildFingerprint(construct)
+		or model:GetAttribute("PresentationVersion") ~= PRESENTATION_VERSION
+		or model:GetAttribute("BasePartCount") ~= countDirectBaseParts(frameTemplate)
+		or countDirectBaseParts(model) ~= countDirectBaseParts(frameTemplate)
+	then
+		return false
+	end
+
+	local rootPart = model:FindFirstChild(ROOT_PART_NAME)
+	if not rootPart
+		or not rootPart:IsA("BasePart")
+		or model.PrimaryPart ~= rootPart
+		or not rootPart.Anchored
+		or not cframesMatch(rootPart.CFrame, targetRootCFrame)
+	then
+		return false
+	end
+	if not hasCompleteBaseWelds(model, rootPart) then
+		return false
+	end
+
+	for _, roleContract in ipairs(ROLE_CONTRACTS) do
+		local moduleTemplate = moduleTemplates[roleContract.Role]
+		if not moduleTemplate or not validateRuntimeModule(model, construct, roleContract, moduleTemplate) then
+			return false
+		end
+	end
+	return isOneConnectedAssembly(model, rootPart)
+end
+
+local function disconnectConnection(map: { [Player]: RBXScriptConnection }, player: Player)
+	local connection = map[player]
+	if connection then
+		connection:Disconnect()
+		map[player] = nil
+	end
+end
+
+local function disconnectModelConnections(player: Player)
+	local connections = modelConnections[player]
+	if connections then
+		for _, connection in ipairs(connections) do
+			connection:Disconnect()
+		end
+	end
+	modelConnections[player] = nil
+	watchedRuntimeModels[player] = nil
+end
+
+local function getExistingPlayerContainer(player: Player): Folder?
+	local runtimeFolder = runtimeConstructsFolder
+	if not runtimeFolder then
+		return nil
+	end
+
+	local existing = runtimeFolder:FindFirstChild(getPlayerContainerName(player))
+	if existing and existing:IsA("Folder") then
+		return existing
+	end
+	return nil
+end
+
+local function removeRuntime(player: Player, destroyContainer: boolean)
+	local existingContainer = getExistingPlayerContainer(player)
+	if not existingContainer and not modelConnections[player] and not containerConnections[player] then
+		return
+	end
+
+	recoveryGenerations[player] = (recoveryGenerations[player] or 0) + 1
+	suppressRecovery[player] = true
+	disconnectModelConnections(player)
+	if destroyContainer then
+		disconnectConnection(containerConnections, player)
+	end
+
+	local container = existingContainer
+	if container then
+		if destroyContainer then
+			container:Destroy()
+		else
+			for _, child in ipairs(container:GetChildren()) do
+				child:Destroy()
+			end
+		end
+	end
+	suppressRecovery[player] = nil
+end
+
+local function queueReconcile(player: Player)
+	if pendingReconciliations[player] then
+		return
+	end
+	pendingReconciliations[player] = true
+	task.defer(function()
+		pendingReconciliations[player] = nil
+		PrototypeConstructRuntimeService.Reconcile(player)
+	end)
+end
+
+local function watchPlayerContainer(player: Player, container: Folder)
+	disconnectConnection(containerConnections, player)
+	local generation = recoveryGenerations[player] or 0
+	containerConnections[player] = container.ChildRemoved:Connect(function(child: Instance)
+		if suppressRecovery[player] or not child:IsA("Model") then
+			return
+		end
+		task.defer(function()
+			if not suppressRecovery[player] and recoveryGenerations[player] == generation then
+				queueReconcile(player)
+			end
+		end)
+	end)
+end
+
+local function getOrCreatePlayerContainer(player: Player): Folder?
+	local runtimeFolder = runtimeConstructsFolder
+	if not runtimeFolder then
+		return nil
+	end
+
+	local containerName = getPlayerContainerName(player)
+	local existing = runtimeFolder:FindFirstChild(containerName)
+	if existing then
+		if not existing:IsA("Folder") then
+			warn(string.format("[ODDWORKS][PrototypeRuntime] %s must be a Folder.", existing:GetFullName()))
+			return nil
+		end
+		if not containerConnections[player] then
+			watchPlayerContainer(player, existing)
+		end
+		return existing
+	end
+
+	local container = Instance.new("Folder")
+	container.Name = containerName
+	container:SetAttribute("OwnerUserId", player.UserId)
+	container.Parent = runtimeFolder
+	watchPlayerContainer(player, container)
+	return container
+end
+
+local function scheduleIntegrityReconcile(player: Player, model: Model, generation: number)
+	if suppressRecovery[player] then
+		return
+	end
+
+	-- The post-removal callbacks below may overlap. The watched-model and
+	-- generation checks collapse stale callbacks after a service-owned rebuild.
+	task.defer(function()
+		if not suppressRecovery[player]
+			and recoveryGenerations[player] == generation
+			and watchedRuntimeModels[player] == model
+		then
+			queueReconcile(player)
+		end
+	end)
+end
+
+local function watchRuntimeModel(player: Player, model: Model)
+	disconnectModelConnections(player)
+	local generation = recoveryGenerations[player] or 0
+	local rootPart = model:FindFirstChild(ROOT_PART_NAME)
+	local connections: { RBXScriptConnection } = {}
+	watchedRuntimeModels[player] = model
+
+	-- DescendantRemoving covers nested visual corruption. ChildRemoved signals
+	-- direct frame/module removal after the hierarchy has actually changed,
+	-- avoiding reliance on only the pre-removal event for required modules.
+	table.insert(connections, model.DescendantRemoving:Connect(function()
+		scheduleIntegrityReconcile(player, model, generation)
+	end))
+	table.insert(connections, model.ChildRemoved:Connect(function()
+		scheduleIntegrityReconcile(player, model, generation)
+	end))
+	if rootPart and rootPart:IsA("BasePart") then
+		table.insert(connections, rootPart.ChildRemoved:Connect(function()
+			scheduleIntegrityReconcile(player, model, generation)
+		end))
+	end
+
+	modelConnections[player] = connections
+end
+
+function PrototypeConstructRuntimeService.Reconcile(player: Player): boolean
+	if not started then
+		return false
+	end
+
+	local snapshot = ModularPrototypeStateService.GetSnapshot(player)
+	local construct = if snapshot then snapshot.PrototypeConstruct else nil
+	if player.Parent ~= Players or not construct then
+		removeRuntime(player, true)
+		return true
+	end
+
+	local plot = WorkshopService.GetAssignedPlot(player)
+	if not plot then
+		removeRuntime(player, true)
+		return false
+	end
+	local markerCFrame, plotId = getDisplayMarker(plot)
+	if not markerCFrame or not plotId then
+		removeRuntime(player, true)
+		return false
+	end
+	clearWarning(string.format("Marker:%s", plot.Name))
+
+	local frameTemplate, moduleTemplates = resolveTemplates(construct)
+	if not frameTemplate or not moduleTemplates then
+		-- A content failure cannot be allowed to leave a stale model that implies
+		-- a different authoritative build. Inventory and Construct state stay intact.
+		removeRuntime(player, false)
+		return false
+	end
+
+	local container = getOrCreatePlayerContainer(player)
+	if not container then
+		return false
+	end
+	local targetRootCFrame = getTargetRootCFrame(markerCFrame)
+	local candidate: Model? = nil
+	local modelCount = 0
+	for _, child in ipairs(container:GetChildren()) do
+		if child:IsA("Model") then
+			modelCount += 1
+			candidate = child
+		end
+	end
+	if modelCount == 1
+		and candidate
+		and isRuntimeModelValid(
+			player,
+			candidate,
+			construct,
+			targetRootCFrame,
+			plotId,
+			frameTemplate,
+			moduleTemplates
+		)
+	then
+		if not modelConnections[player] or watchedRuntimeModels[player] ~= candidate then
+			watchRuntimeModel(player, candidate)
+		end
+		return true
+	end
+
+	recoveryGenerations[player] = (recoveryGenerations[player] or 0) + 1
+	suppressRecovery[player] = true
+	disconnectModelConnections(player)
+	for _, child in ipairs(container:GetChildren()) do
+		child:Destroy()
+	end
+
+	local rebuilt = buildRuntimeModel(player, construct, frameTemplate, moduleTemplates, targetRootCFrame, plotId)
+	if rebuilt then
+		rebuilt.Parent = container
+	end
+	suppressRecovery[player] = nil
+	watchPlayerContainer(player, container)
+	if not rebuilt then
+		warn(string.format("[ODDWORKS][PrototypeRuntime] Failed to build runtime Construct for %s.", player.Name))
+		return false
+	end
+
+	watchRuntimeModel(player, rebuilt)
+	print(string.format("[ODDWORKS][PrototypeRuntime] Reconstructed %s for %s in %s.", FRAME_ID, player.Name, plotId))
+	return true
+end
+
+-- Returns presence/count facts only for Studio diagnostics. Authoritative
+-- Construct data remains in ModularPrototypeStateService and no runtime
+-- Instance reference crosses this boundary.
+function PrototypeConstructRuntimeService.GetDiagnosticSnapshot(player: Player): { [string]: any }
+	local stateSnapshot = ModularPrototypeStateService.GetSnapshot(player)
+	local expected = stateSnapshot ~= nil and stateSnapshot.PrototypeConstruct ~= nil
+	local container = getExistingPlayerContainer(player)
+	local modelCount = 0
+	if container then
+		for _, child in ipairs(container:GetChildren()) do
+			if child:IsA("Model") then
+				modelCount += 1
+			end
+		end
+	end
+
+	return {
+		Expected = expected,
+		ContainerPresent = container ~= nil,
+		ModelPresent = modelCount == 1,
+		ModelCount = modelCount,
+	}
+end
+
+local function cleanupPlayer(player: Player)
+	pendingReconciliations[player] = nil
+	removeRuntime(player, true)
+	recoveryGenerations[player] = nil
+end
+
+function PrototypeConstructRuntimeService.Start()
+	if started then
+		return
+	end
+	started = true
+
+	local runtimeRoot = getOrCreateFolder(Workspace, RUNTIME_ROOT_NAME)
+	if not runtimeRoot then
+		warn("[ODDWORKS][PrototypeRuntime] Runtime root unavailable; service cannot reconstruct Constructs.")
+		return
+	end
+	runtimeConstructsFolder = getOrCreateFolder(runtimeRoot, RUNTIME_FOLDER_NAME)
+	if not runtimeConstructsFolder then
+		warn("[ODDWORKS][PrototypeRuntime] Runtime Constructs folder unavailable.")
+		return
+	end
+
+	ModularPrototypeStateService.ObserveStateChanged(queueReconcile)
+	ModularPrototypeStateService.ObserveStateRemoved(cleanupPlayer)
+	PlayerStateService.ObserveStateChanged(queueReconcile)
+	PlayerStateService.ObserveStateRemoved(cleanupPlayer)
+	Players.PlayerRemoving:Connect(cleanupPlayer)
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		queueReconcile(player)
+	end
+
+	-- One bounded audit catches property corruption and deleted runtime folders
+	-- without creating a heartbeat or loop per Construct.
+	task.spawn(function()
+		while started do
+			task.wait(AUDIT_INTERVAL_SECONDS)
+			for _, player in ipairs(Players:GetPlayers()) do
+				if ModularPrototypeStateService.HasState(player) then
+					queueReconcile(player)
+				end
+			end
+		end
+	end)
+
+	print("[ODDWORKS][PrototypeRuntime] Service started; physical Constructs are derived and disposable.")
+end
+
+return PrototypeConstructRuntimeService

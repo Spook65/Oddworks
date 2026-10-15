@@ -2,11 +2,13 @@
 
 local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local Services = script.Parent
 local ServerRoot = assert(Services.Parent, "[ODDWORKS][OddlingDisplay] Services folder must have a parent.")
 local Config = ServerRoot:WaitForChild("Config")
+local OddlingCollectionService = require(Services:WaitForChild("OddlingCollectionService"))
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
 local WorkshopService = require(Services:WaitForChild("WorkshopService"))
 
@@ -25,6 +27,7 @@ local WorkshopLevels = require(workshopLevelsModule)
 
 type OddlingDefinition = {
 	SpeciesId: string,
+	TemplateFolderName: string,
 	TemplateName: string,
 	RootPartName: string,
 	AnchorAllParts: boolean,
@@ -146,7 +149,11 @@ end
 -- Validates the minimum contract for either an animated production rig or a
 -- static prototype without silently repairing artistic hierarchy.
 local function validateTemplate(candidate: Instance, definition: OddlingDefinition): Model?
-	local templatePath = string.format("ServerStorage.ODDWORKSAssets.Oddlings.%s", definition.TemplateName)
+	local templatePath = string.format(
+		"ServerStorage.ODDWORKSAssets.%s.%s",
+		definition.TemplateFolderName,
+		definition.TemplateName
+	)
 	if not candidate:IsA("Model") then
 		warn(string.format("[ODDWORKS][OddlingDisplay] %s must be a Model.", templatePath))
 		return nil
@@ -202,8 +209,8 @@ local function discoverTemplate(speciesId: string): Model?
 	end
 
 	local assets = ServerStorage:FindFirstChild("ODDWORKSAssets")
-	local oddlings = if assets then assets:FindFirstChild("Oddlings") else nil
-	local candidate = if oddlings then oddlings:FindFirstChild(definition.TemplateName) else nil
+	local templates = if assets then assets:FindFirstChild(definition.TemplateFolderName) else nil
+	local candidate = if templates then templates:FindFirstChild(definition.TemplateName) else nil
 	local cached = cachedTemplates[speciesId]
 	if cached and candidate == cached then
 		return cached
@@ -214,7 +221,8 @@ local function discoverTemplate(speciesId: string): Model?
 		if not missingTemplateWarnings[speciesId] then
 			warn(
 				string.format(
-					"[ODDWORKS][OddlingDisplay] Missing runtime template: ServerStorage.ODDWORKSAssets.Oddlings.%s",
+						"[ODDWORKS][OddlingDisplay] Missing runtime template: ServerStorage.ODDWORKSAssets.%s.%s",
+						definition.TemplateFolderName,
 					definition.TemplateName
 				)
 			)
@@ -458,46 +466,26 @@ local function cleanupPlayerDisplays(player: Player)
 	end
 end
 
--- Round-robin allocation gives every owned/configured species one slot before
--- duplicates. Sorted configuration order makes mixed workshops reproducible.
-local function buildDisplayAllocation(ownedOddlings: { [string]: number }, capacity: number): { DisplayAllocation }
-	local definitions = Oddlings.GetAllDefinitions()
-	local remaining: { [string]: number } = {}
+-- Converts the authoritative session loadout into stable physical allocations.
+-- Empty slots remain empty; no production-value sorting or automatic replacement occurs here.
+local function buildDisplayAllocations(
+	loadout: OddlingCollectionService.DisplayLoadout,
+	capacity: number
+): { [number]: DisplayAllocation }
+	local allocations: { [number]: DisplayAllocation } = {}
 	local speciesDisplayIndexes: { [string]: number } = {}
-	local allocations: { DisplayAllocation } = {}
-
-	for _, definition in ipairs(definitions) do
-		local ownedCount = ownedOddlings[definition.SpeciesId] or 0
-		if ownedCount > 0 and discoverTemplate(definition.SpeciesId) then
-			remaining[definition.SpeciesId] = ownedCount
-			speciesDisplayIndexes[definition.SpeciesId] = 0
+	for slotIndex = 1, capacity do
+		local speciesId = loadout[slotIndex]
+		if speciesId and discoverTemplate(speciesId) then
+			local displayIndex = (speciesDisplayIndexes[speciesId] or 0) + 1
+			speciesDisplayIndexes[speciesId] = displayIndex
+			allocations[slotIndex] = {
+				SlotIndex = slotIndex,
+				SpeciesId = speciesId,
+				SpeciesDisplayIndex = displayIndex,
+			}
 		end
 	end
-
-	while #allocations < capacity do
-		local assignedThisRound = false
-
-		for _, definition in ipairs(definitions) do
-			local speciesId = definition.SpeciesId
-			local remainingCount = remaining[speciesId] or 0
-			if remainingCount > 0 and #allocations < capacity then
-				local speciesDisplayIndex = (speciesDisplayIndexes[speciesId] or 0) + 1
-				speciesDisplayIndexes[speciesId] = speciesDisplayIndex
-				remaining[speciesId] = remainingCount - 1
-				table.insert(allocations, {
-					SlotIndex = #allocations + 1,
-					SpeciesId = speciesId,
-					SpeciesDisplayIndex = speciesDisplayIndex,
-				})
-				assignedThisRound = true
-			end
-		end
-
-		if not assignedThisRound then
-			break
-		end
-	end
-
 	return allocations
 end
 
@@ -522,6 +510,136 @@ local function collectExistingDisplays(container: Folder): { [number]: Model }
 	end
 
 	return displaysBySlot
+end
+
+local function playPedestalRevealEffect(container: Folder, slot: DisplaySlot, speciesId: string)
+	local isKilnback = speciesId == "Kilnback"
+	local color = if isKilnback then Color3.fromRGB(255, 128, 35) else Color3.fromRGB(58, 225, 255)
+	local duration = if isKilnback then 1.15 else 0.65
+	local endSize = if isKilnback then Vector3.new(10, 10, 10) else Vector3.new(5.5, 5.5, 5.5)
+
+	local pulse = Instance.new("Part")
+	pulse.Name = speciesId .. "RevealPulse"
+	pulse.Anchored = true
+	pulse.CanCollide = false
+	pulse.CanQuery = false
+	pulse.CanTouch = false
+	pulse.CastShadow = false
+	pulse.Shape = Enum.PartType.Ball
+	pulse.Material = Enum.Material.Neon
+	pulse.Color = color
+	pulse.Transparency = 0.22
+	pulse.Size = if isKilnback then Vector3.new(2.4, 2.4, 2.4) else Vector3.new(1.2, 1.2, 1.2)
+	pulse.CFrame = slot.WorldCFrame * CFrame.new(0, if isKilnback then 3.5 else 1.8, 0)
+	pulse.Parent = container
+
+	local light = Instance.new("PointLight")
+	light.Color = color
+	light.Brightness = if isKilnback then 7 else 4
+	light.Range = if isKilnback then 22 else 13
+	light.Shadows = false
+	light.Parent = pulse
+
+	local tween = TweenService:Create(
+		pulse,
+		TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Size = endSize, Transparency = 1 }
+	)
+	tween:Play()
+	tween.Completed:Once(function()
+		if pulse.Parent ~= nil then
+			pulse:Destroy()
+		end
+	end)
+	task.delay(duration + 0.5, function()
+		if pulse.Parent ~= nil then
+			pulse:Destroy()
+		end
+	end)
+end
+
+local function updatePedestals(
+	container: Folder,
+	plot: BasePart,
+	slots: { DisplaySlot },
+	capacity: number,
+	allocations: { [number]: DisplayAllocation }
+)
+	for slotIndex, slot in ipairs(slots) do
+		local pedestalName = string.format("DisplayPedestal_%02d", slotIndex)
+		local existing = container:FindFirstChild(pedestalName)
+		local pedestal: Part
+		if existing and existing:IsA("Part") then
+			pedestal = existing
+		else
+			if existing then
+				existing:Destroy()
+			end
+			pedestal = Instance.new("Part")
+			pedestal.Name = pedestalName
+			pedestal.Anchored = true
+			pedestal.CanCollide = false
+			pedestal.CanQuery = false
+			pedestal.CanTouch = false
+			pedestal.Size = Vector3.new(4.8, 0.3, 4.2)
+			pedestal.TopSurface = Enum.SurfaceType.Smooth
+			pedestal.BottomSurface = Enum.SurfaceType.Smooth
+			pedestal.Parent = container
+		end
+		pedestal.CFrame = slot.WorldCFrame * CFrame.new(0, -0.15, 0)
+		pedestal:SetAttribute("DisplaySlotIndex", slotIndex)
+		pedestal:SetAttribute("OwnerUserId", container:GetAttribute("OwnerUserId"))
+
+		local unlocked = slotIndex <= capacity
+		local allocation = allocations[slotIndex]
+		local previousSpeciesId = pedestal:GetAttribute("DisplayedSpeciesId")
+		pedestal:SetAttribute("DisplayedSpeciesId", if allocation then allocation.SpeciesId else nil)
+		if not unlocked then
+			pedestal.Color = Color3.fromRGB(38, 42, 43)
+			pedestal.Material = Enum.Material.Metal
+			pedestal.Transparency = 0.62
+		elseif allocation then
+			pedestal.Color = plot.Color:Lerp(Color3.new(1, 1, 1), 0.22)
+			pedestal.Material = Enum.Material.Neon
+			pedestal.Transparency = 0.08
+		else
+			pedestal.Color = plot.Color:Lerp(Color3.fromRGB(37, 43, 45), 0.58)
+			pedestal.Material = Enum.Material.Metal
+			pedestal.Transparency = 0.18
+		end
+
+		local light = pedestal:FindFirstChild("OccupiedLight")
+		if not light or not light:IsA("PointLight") then
+			if light then
+				light:Destroy()
+			end
+			light = Instance.new("PointLight")
+			light.Name = "OccupiedLight"
+			light.Range = 9
+			light.Shadows = false
+			light.Parent = pedestal
+		end
+		local pointLight = light :: PointLight
+		pointLight.Color = plot.Color
+		pointLight.Enabled = unlocked and allocation ~= nil
+		pointLight.Brightness = if pointLight.Enabled then 1.2 else 0
+		if allocation and previousSpeciesId ~= allocation.SpeciesId then
+			local pulseSpeciesId = allocation.SpeciesId
+			playPedestalRevealEffect(container, slot, pulseSpeciesId)
+			pointLight.Brightness = 4
+			local pulseDuration = if pulseSpeciesId == "Kilnback" then 1.15 else 0.7
+			pointLight.Color = if pulseSpeciesId == "Kilnback"
+				then Color3.fromRGB(255, 128, 35)
+				else Color3.fromRGB(58, 225, 255)
+			pointLight.Brightness = if pulseSpeciesId == "Kilnback" then 7 else 4
+			task.delay(pulseDuration, function()
+				if pedestal.Parent ~= nil and pedestal:GetAttribute("DisplayedSpeciesId") == pulseSpeciesId then
+					pointLight.Color = plot.Color
+					pointLight.Brightness = 1.2
+				end
+			end)
+		end
+	end
 end
 
 -- Clones one configured template into an authoritative allocation. Spawn failure
@@ -557,6 +675,35 @@ local function spawnDisplay(
 	if not placeDisplayAtSlot(clone, slot) then
 		clone:Destroy()
 		return nil
+	end
+
+	local rootPart = clone:FindFirstChild(definition.RootPartName, true)
+	if rootPart and rootPart:IsA("BasePart") then
+		local billboard = Instance.new("BillboardGui")
+		billboard.Name = "ProductionLabel"
+		billboard.Adornee = rootPart
+		billboard.AlwaysOnTop = false
+		billboard.MaxDistance = 48
+		billboard.Size = UDim2.fromOffset(150, 40)
+		billboard.StudsOffsetWorldSpace = Vector3.new(0, clone:GetExtentsSize().Y + 0.45, 0)
+		billboard.Parent = rootPart
+
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundColor3 = Color3.fromRGB(23, 30, 30)
+		label.BackgroundTransparency = 0.16
+		label.BorderSizePixel = 0
+		label.Font = Enum.Font.GothamBold
+		label.Text = string.format(
+			"%s\n+%d HYPE / %ds",
+			string.upper(definition.SpeciesId),
+			definition.HypePerInterval,
+			definition.HypeIntervalSeconds
+		)
+		label.TextColor3 = Color3.fromRGB(218, 246, 225)
+		label.TextSize = 12
+		label.TextWrapped = true
+		label.Parent = billboard
 	end
 
 	startIdleAnimation(clone, definition)
@@ -600,28 +747,35 @@ local function reconcilePlayer(player: Player)
 
 	local slots = discoverDisplaySlots(plot, plotId)
 	local capacity = math.min(#slots, levelDefinition.DisplayCapacity)
-	local allocations = buildDisplayAllocation(snapshot.OwnedOddlings, capacity)
-	if #allocations == 0 then
+	local loadout = OddlingCollectionService.GetDisplayLoadout(player)
+	if not loadout then
 		cleanupPlayerDisplays(player)
-		capacityWarningKeys[player] = nil
 		return
 	end
+	local allocations = buildDisplayAllocations(loadout, capacity)
 
 	local container = getOrCreatePlayerContainer(player)
 	if not container then
 		return
 	end
+	updatePedestals(container, plot, slots, capacity, allocations)
 
 	local existingDisplays = collectExistingDisplays(container)
 	for slotIndex, display in pairs(existingDisplays) do
-		if slotIndex > #allocations then
+		if not allocations[slotIndex] then
 			display:Destroy()
 			existingDisplays[slotIndex] = nil
 		end
 	end
 
 	local spawnedCount = 0
-	for _, allocation in ipairs(allocations) do
+	local displayedCount = 0
+	for slotIndex = 1, capacity do
+		local allocation = allocations[slotIndex]
+		if not allocation then
+			continue
+		end
+		displayedCount += 1
 		local existing = existingDisplays[allocation.SlotIndex]
 		local reusable = existing
 			and existing:GetAttribute("OddlingSpeciesId") == allocation.SpeciesId
@@ -644,7 +798,7 @@ local function reconcilePlayer(player: Player)
 	for _, definition in ipairs(Oddlings.GetAllDefinitions()) do
 		totalOwnedConfigured += snapshot.OwnedOddlings[definition.SpeciesId] or 0
 	end
-	local warningKey = string.format("%d:%d:%d", totalOwnedConfigured, #allocations, capacity)
+	local warningKey = string.format("%d:%d:%d", totalOwnedConfigured, displayedCount, capacity)
 	if totalOwnedConfigured > capacity and capacityWarningKeys[player] ~= warningKey then
 		warn(
 			string.format(
@@ -684,30 +838,10 @@ function OddlingDisplayService.HasRuntimeTemplate(speciesId: string): boolean
 	return discoverTemplate(speciesId) ~= nil
 end
 
--- Returns a fresh species-count map derived from this service's current clones.
--- Callers can mutate the copy without changing display bookkeeping.
+-- Returns a fresh species-count map derived from the authoritative session
+-- loadout. Missing physical clones never suppress Hype or rewrite ownership.
 function OddlingDisplayService.GetDisplayedCounts(player: Player): { [string]: number }
-	local counts: { [string]: number } = {}
-	local displaysFolder = runtimeDisplaysFolder
-	if not displaysFolder then
-		return counts
-	end
-
-	local container = displaysFolder:FindFirstChild(getPlayerContainerName(player))
-	if not container or not container:IsA("Folder") then
-		return counts
-	end
-
-	for _, child in ipairs(container:GetChildren()) do
-		if child:IsA("Model") then
-			local speciesId = child:GetAttribute("OddlingSpeciesId")
-			if typeof(speciesId) == "string" and Oddlings.GetDefinition(speciesId) then
-				counts[speciesId] = (counts[speciesId] or 0) + 1
-			end
-		end
-	end
-
-	return counts
+	return OddlingCollectionService.GetDisplayedCounts(player)
 end
 
 -- Keeps the established narrow query for callers interested in one species.
@@ -725,6 +859,13 @@ function OddlingDisplayService.Reconcile(player: Player): boolean
 
 	queueReconcile(player)
 	return true
+end
+
+local function cleanupPlayer(player: Player)
+	pendingReconciliations[player] = nil
+	capacityWarningKeys[player] = nil
+	cleanupPlayerDisplays(player)
+	suppressContainerRecovery[player] = nil
 end
 
 -- Starts after PlayerStateService and WorkshopService. State changes reconcile
@@ -773,34 +914,34 @@ function OddlingDisplayService.Start()
 	-- Runtime template removal/restoration is presentation failure only. Re-running
 	-- normal reconciliation lets existing ownership disappear/recover visually.
 	local assets = ServerStorage:FindFirstChild("ODDWORKSAssets")
-	local templatesFolder = if assets then assets:FindFirstChild("Oddlings") else nil
-	if templatesFolder then
-		templatesFolder.ChildAdded:Connect(function()
-			for _, player in ipairs(Players:GetPlayers()) do
-				queueReconcile(player)
-			end
-		end)
-		templatesFolder.ChildRemoved:Connect(function()
-			for _, player in ipairs(Players:GetPlayers()) do
-				queueReconcile(player)
-			end
-		end)
+	local watchedFolders: { [Instance]: boolean } = {}
+	for _, definition in ipairs(Oddlings.GetAllDefinitions()) do
+		local templatesFolder = if assets then assets:FindFirstChild(definition.TemplateFolderName) else nil
+		if templatesFolder and not watchedFolders[templatesFolder] then
+			watchedFolders[templatesFolder] = true
+			templatesFolder.ChildAdded:Connect(function()
+				for _, player in ipairs(Players:GetPlayers()) do
+					queueReconcile(player)
+				end
+			end)
+			templatesFolder.ChildRemoved:Connect(function()
+				for _, player in ipairs(Players:GetPlayers()) do
+					queueReconcile(player)
+				end
+			end)
+		end
 	end
 
 	for _, definition in ipairs(Oddlings.GetAllDefinitions()) do
 		discoverTemplate(definition.SpeciesId)
 	end
 
-	PlayerStateService.ObserveStateChanged(function(player: Player)
+	OddlingCollectionService.ObserveLoadoutChanged(function(player: Player)
 		queueReconcile(player)
 	end)
 
-	Players.PlayerRemoving:Connect(function(player: Player)
-		pendingReconciliations[player] = nil
-		capacityWarningKeys[player] = nil
-		cleanupPlayerDisplays(player)
-		suppressContainerRecovery[player] = nil
-	end)
+	PlayerStateService.ObserveStateRemoved(cleanupPlayer)
+	Players.PlayerRemoving:Connect(cleanupPlayer)
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		queueReconcile(player)
