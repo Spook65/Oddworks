@@ -2,6 +2,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Debris = game:GetService("Debris")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
@@ -37,7 +38,16 @@ type MovementOverride = {
 	Player: Player,
 	Humanoid: Humanoid,
 	BaselineWalkSpeed: number,
+	ChaseMultiplier: number,
+	PulseMultiplier: number,
+	ChaseWalkSpeed: number,
 	AppliedWalkSpeed: number,
+}
+type ScrapPulseState = {
+	AttackId: number,
+	TargetPosition: Vector3,
+	ResolveAt: number,
+	TelegraphModel: Model,
 }
 export type DiagnosticSnapshot = {
 	Phase: string,
@@ -53,6 +63,14 @@ export type DiagnosticSnapshot = {
 	MovementBaselineWalkSpeed: number?,
 	ExpectedSpringLegsWalkSpeed: number?,
 	ConfiguredSpringLegsMultiplier: number,
+	ExpectedCurrentWalkSpeed: number?,
+	ScrapPulseReady: boolean,
+	ScrapPulseAttackId: number,
+	ScrapPulseTelegraphActive: boolean,
+	ScrapPulseTargetPosition: Vector3?,
+	ScrapPulseDebuffActive: boolean,
+	ScrapPulseDebuffMultiplier: number,
+	ScrapPulseDebuffRemaining: number,
 	CooldownRemaining: number,
 }
 
@@ -74,6 +92,11 @@ local lastAttemptTimes: { [Player]: number } = {}
 local lastConfirmationTimes: { [Player]: number } = {}
 local movementOverride: MovementOverride? = nil
 local springLegsEligibleForAttempt = false
+local nextScrapPulseAt = 0
+local nextScrapPulseId = 0
+local activeScrapPulse: ScrapPulseState? = nil
+local pulseDebuffAttackId: number? = nil
+local pulseDebuffExpiresAt = 0
 local activeDeathConnection: RBXScriptConnection? = nil
 local carryModel: Model? = nil
 local wardenModel: Model? = nil
@@ -148,6 +171,17 @@ local function validateDefinition(candidate: Definition)
 		or not isPositiveFinite(candidate.StageSpeeds[1])
 		or not isPositiveFinite(candidate.StageSpeeds[2])
 		or not isPositiveFinite(candidate.StageSpeeds[3])
+		or not isPositiveFinite(candidate.ScrapPulseTelegraphSeconds)
+		or candidate.ScrapPulseTelegraphSeconds < 0.8
+		or candidate.ScrapPulseTelegraphSeconds > 1.1
+		or not isPositiveFinite(candidate.ScrapPulseCooldownSeconds)
+		or candidate.ScrapPulseCooldownSeconds < 4
+		or candidate.ScrapPulseCooldownSeconds > 6
+		or not isPositiveFinite(candidate.ScrapPulseRadius)
+		or not isPositiveFinite(candidate.ScrapPulsePredictionDistance)
+		or not isPositiveFinite(candidate.ScrapPulseSlowMultiplier)
+		or candidate.ScrapPulseSlowMultiplier >= 1
+		or not isPositiveFinite(candidate.ScrapPulseSlowSeconds)
 		or not isPositiveFinite(candidate.ResetSeconds)
 		or not isPositiveFinite(candidate.SuccessCooldownSeconds)
 		or not isPositiveFinite(candidate.RevealDelaySeconds)
@@ -185,51 +219,64 @@ local function restoreChaseMovement(player: Player)
 		end
 		movementOverride = nil
 		springLegsEligibleForAttempt = false
+		pulseDebuffAttackId = nil
+		pulseDebuffExpiresAt = 0
 	elseif carrier == player then
 		springLegsEligibleForAttempt = false
+		pulseDebuffAttackId = nil
+		pulseDebuffExpiresAt = 0
 	end
 end
 
-local function applySpringLegsMovement(player: Player, humanoid: Humanoid, candidate: Definition): boolean
+local function applyDerivedMovement(activeOverride: MovementOverride): boolean
+	local expected = activeOverride.BaselineWalkSpeed
+		* activeOverride.ChaseMultiplier
+		* activeOverride.PulseMultiplier
+	activeOverride.ChaseWalkSpeed = activeOverride.BaselineWalkSpeed * activeOverride.ChaseMultiplier
+	activeOverride.AppliedWalkSpeed = expected
+	activeOverride.Humanoid.WalkSpeed = expected
+	return math.abs(activeOverride.Humanoid.WalkSpeed - expected) <= 0.01
+end
+
+local function applyChaseMovement(player: Player, humanoid: Humanoid, candidate: Definition): boolean
 	restoreChaseMovement(player)
-	if not ConstructCapabilityResolver.HasSpringLegsChaseCapability(player) then
-		return false
-	end
 	local baseline = humanoid.WalkSpeed
 	if not isPositiveFinite(baseline) then
 		return false
 	end
-	local applied = baseline * candidate.SpringLegsSpeedMultiplier
+	local hasSpringLegs = ConstructCapabilityResolver.HasSpringLegsChaseCapability(player)
+	local chaseMultiplier = if hasSpringLegs then candidate.SpringLegsSpeedMultiplier else 1
 	movementOverride = {
 		Player = player,
 		Humanoid = humanoid,
 		BaselineWalkSpeed = baseline,
-		AppliedWalkSpeed = applied,
+		ChaseMultiplier = chaseMultiplier,
+		PulseMultiplier = 1,
+		ChaseWalkSpeed = baseline * chaseMultiplier,
+		AppliedWalkSpeed = baseline * chaseMultiplier,
 	}
-	springLegsEligibleForAttempt = true
-	humanoid.WalkSpeed = applied
-	return math.abs(humanoid.WalkSpeed - applied) <= 0.01
+	springLegsEligibleForAttempt = hasSpringLegs
+	local applied = applyDerivedMovement(movementOverride :: MovementOverride)
+	return hasSpringLegs and applied
 end
 
-local function verifySpringLegsMovement(player: Player, humanoid: Humanoid): boolean
+local function verifyChaseMovement(player: Player, humanoid: Humanoid): boolean
 	local activeOverride = movementOverride
 	if not activeOverride
 		or activeOverride.Player ~= player
 		or activeOverride.Humanoid ~= humanoid
-		or not springLegsEligibleForAttempt
-		or not ConstructCapabilityResolver.HasSpringLegsChaseCapability(player)
 	then
 		return false
 	end
 
 	if math.abs(humanoid.WalkSpeed - activeOverride.AppliedWalkSpeed) > 0.01 then
 		warn(string.format(
-			"[ODDWORKS][FurnacePodChase] SpringLegs WalkSpeed for %s changed from expected %.2f to %.2f during activation; restoring once at chase start.",
+			"[ODDWORKS][FurnacePodChase] Derived WalkSpeed for %s changed from expected %.2f to %.2f during activation; restoring once at chase start.",
 			player.Name,
 			activeOverride.AppliedWalkSpeed,
 			humanoid.WalkSpeed
 		))
-		humanoid.WalkSpeed = activeOverride.AppliedWalkSpeed
+		applyDerivedMovement(activeOverride)
 	end
 	return math.abs(humanoid.WalkSpeed - activeOverride.AppliedWalkSpeed) <= 0.01
 end
@@ -290,7 +337,17 @@ local function disconnectActiveDeath()
 	end
 end
 
+local function destroyScrapPulseTelegraph()
+	local pulse = activeScrapPulse
+	activeScrapPulse = nil
+	if pulse and pulse.TelegraphModel.Parent ~= nil then
+		pulse.TelegraphModel:Destroy()
+	end
+end
+
 local function destroyAttemptModels()
+	destroyScrapPulseTelegraph()
+	nextScrapPulseAt = 0
 	if carryModel then
 		carryModel:Destroy()
 		carryModel = nil
@@ -436,6 +493,7 @@ local function createWarden(spawnMarker: BasePart): Model
 	newDisplayPart(model, "Head", root.CFrame, CFrame.new(0, 5, 0), Vector3.new(2.5, 1.8, 2.1), Color3.fromRGB(98, 91, 79), Enum.Material.Metal, nil)
 	local eye = newDisplayPart(model, "Eye", root.CFrame, CFrame.new(0, 5, -1.1), Vector3.new(1.2, 0.45, 0.25), Color3.fromRGB(255, 190, 54), Enum.Material.Neon, nil)
 	local alarmBeacon = newDisplayPart(model, "AlarmBeacon", root.CFrame, CFrame.new(0, 6.25, 0), Vector3.new(0.8, 0.8, 0.8), Color3.fromRGB(244, 70, 38), Enum.Material.Neon, Enum.PartType.Ball)
+	local pulseEmitter = newDisplayPart(model, "PulseEmitter", root.CFrame, CFrame.new(2.65, 3.15, -0.2), Vector3.new(0.7, 0.7, 0.7), Color3.fromRGB(255, 112, 38), Enum.Material.Neon, Enum.PartType.Ball)
 	local wakePulse = newDisplayPart(model, "WakePulse", root.CFrame, CFrame.new(0, 0.1, 0) * CFrame.Angles(0, 0, math.rad(90)), Vector3.new(0.15, 6.2, 6.2), Color3.fromRGB(255, 76, 43), Enum.Material.Neon, Enum.PartType.Cylinder)
 	newDisplayPart(model, "LeftArm", root.CFrame, CFrame.new(-2.25, 2.7, 0), Vector3.new(0.8, 3.2, 0.9), Color3.fromRGB(80, 83, 80), Enum.Material.DiamondPlate, nil)
 	newDisplayPart(model, "RightArm", root.CFrame, CFrame.new(2.25, 2.7, 0), Vector3.new(0.8, 3.2, 0.9), Color3.fromRGB(80, 83, 80), Enum.Material.DiamondPlate, nil)
@@ -448,8 +506,15 @@ local function createWarden(spawnMarker: BasePart): Model
 	alarmLight.Color = Color3.fromRGB(255, 76, 43)
 	alarmLight.Range = 20
 	alarmLight.Parent = alarmBeacon
+	local pulseLight = Instance.new("PointLight")
+	pulseLight.Name = "PulseWindupLight"
+	pulseLight.Brightness = 0
+	pulseLight.Color = Color3.fromRGB(255, 104, 36)
+	pulseLight.Range = 16
+	pulseLight.Parent = pulseEmitter
 	eye.Transparency = 0.65
 	alarmBeacon.Transparency = 0.65
+	pulseEmitter.Transparency = 0.78
 	wakePulse.Transparency = 1
 
 	model.Parent = folder
@@ -547,6 +612,195 @@ local function runActivationTelegraph(player: Player, attemptToken: number)
 		end
 		task.wait(0.1)
 	end
+end
+
+local function setWardenPulseWindup(active: boolean)
+	local model = wardenModel
+	local emitter = if model then model:FindFirstChild("PulseEmitter") else nil
+	if emitter and emitter:IsA("BasePart") then
+		emitter.Transparency = if active then 0 else 0.78
+		local light = emitter:FindFirstChild("PulseWindupLight")
+		if light and light:IsA("PointLight") then
+			light.Brightness = if active then 5 else 0
+		end
+	end
+end
+
+local function getScrapPulseTargetPosition(player: Player, root: BasePart, humanoid: Humanoid, candidate: Definition): Vector3
+	local moveDirection = humanoid.MoveDirection
+	local flatDirection = Vector3.new(moveDirection.X, 0, moveDirection.Z)
+	if flatDirection.Magnitude > 1 then
+		flatDirection = flatDirection.Unit
+	end
+	local predicted = root.Position + flatDirection * candidate.ScrapPulsePredictionDistance
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	local excluded: { Instance } = {}
+	if player.Character then
+		table.insert(excluded, player.Character)
+	end
+	if carryModel then
+		table.insert(excluded, carryModel :: Model)
+	end
+	if wardenModel then
+		table.insert(excluded, wardenModel :: Model)
+	end
+	raycastParams.FilterDescendantsInstances = excluded
+	local result = Workspace:Raycast(predicted + Vector3.new(0, 10, 0), Vector3.new(0, -40, 0), raycastParams)
+	if result then
+		return result.Position + Vector3.new(0, 0.12, 0)
+	end
+	return Vector3.new(predicted.X, root.Position.Y - 3, predicted.Z)
+end
+
+local function createScrapPulseTelegraph(targetPosition: Vector3, candidate: Definition, attackId: number): Model
+	local folder = assert(runtimeFolder, "Furnace Pod chase runtime folder is unavailable.")
+	local model = Instance.new("Model")
+	model.Name = string.format("ScrapPulse_%d", attackId)
+	model:SetAttribute("AttackId", attackId)
+	model:SetAttribute("TargetPosition", targetPosition)
+	local orientation = CFrame.new(targetPosition) * CFrame.Angles(0, 0, math.rad(90))
+	local diameter = candidate.ScrapPulseRadius * 2
+	local warning = newDisplayPart(
+		model,
+		"WarningZone",
+		orientation,
+		CFrame.identity,
+		Vector3.new(0.16, diameter, diameter),
+		Color3.fromRGB(255, 78, 34),
+		Enum.Material.Neon,
+		Enum.PartType.Cylinder
+	)
+	warning.Transparency = 0.52
+	local center = newDisplayPart(
+		model,
+		"ImpactCore",
+		orientation,
+		CFrame.new(-0.04, 0, 0),
+		Vector3.new(0.2, diameter * 0.34, diameter * 0.34),
+		Color3.fromRGB(255, 184, 48),
+		Enum.Material.Neon,
+		Enum.PartType.Cylinder
+	)
+	center.Transparency = 0.28
+	local warningLight = Instance.new("PointLight")
+	warningLight.Name = "WarningLight"
+	warningLight.Color = Color3.fromRGB(255, 92, 35)
+	warningLight.Brightness = 2.5
+	warningLight.Range = candidate.ScrapPulseRadius * 2
+	warningLight.Shadows = false
+	warningLight.Parent = center
+	model.Parent = folder
+	TweenService:Create(
+		warning,
+		TweenInfo.new(candidate.ScrapPulseTelegraphSeconds, Enum.EasingStyle.Linear),
+		{ Transparency = 0.3, Color = Color3.fromRGB(255, 43, 24) }
+	):Play()
+	TweenService:Create(
+		center,
+		TweenInfo.new(candidate.ScrapPulseTelegraphSeconds, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+		{ Transparency = 0.05, Size = Vector3.new(0.22, diameter * 0.62, diameter * 0.62) }
+	):Play()
+	return model
+end
+
+local function applyScrapPulseSlow(player: Player, humanoid: Humanoid, attemptToken: number, attackId: number, candidate: Definition)
+	local activeOverride = movementOverride
+	if not activeOverride or activeOverride.Player ~= player or activeOverride.Humanoid ~= humanoid then
+		return
+	end
+	activeOverride.PulseMultiplier = candidate.ScrapPulseSlowMultiplier
+	pulseDebuffAttackId = attackId
+	pulseDebuffExpiresAt = os.clock() + candidate.ScrapPulseSlowSeconds
+	applyDerivedMovement(activeOverride)
+	task.delay(candidate.ScrapPulseSlowSeconds, function()
+		if generation ~= attemptToken
+			or carrier ~= player
+			or state ~= "CHASE_ACTIVE"
+			or pulseDebuffAttackId ~= attackId
+		then
+			return
+		end
+		local currentOverride = movementOverride
+		if not currentOverride or currentOverride ~= activeOverride or currentOverride.Humanoid ~= humanoid then
+			return
+		end
+		pulseDebuffAttackId = nil
+		pulseDebuffExpiresAt = 0
+		currentOverride.PulseMultiplier = 1
+		applyDerivedMovement(currentOverride)
+	end)
+end
+
+local function resolveScrapPulse(player: Player, attemptToken: number, attackId: number, candidate: Definition)
+	local pulse = activeScrapPulse
+	if generation ~= attemptToken
+		or carrier ~= player
+		or state ~= "CHASE_ACTIVE"
+		or not pulse
+		or pulse.AttackId ~= attackId
+	then
+		return
+	end
+	activeScrapPulse = nil
+	setWardenPulseWindup(false)
+	for _, descendant in ipairs(pulse.TelegraphModel:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			descendant.Color = Color3.fromRGB(255, 214, 90)
+			descendant.Transparency = 0.08
+			TweenService:Create(descendant, TweenInfo.new(0.2), { Transparency = 1 }):Play()
+		end
+	end
+	Debris:AddItem(pulse.TelegraphModel, 0.25)
+
+	local root, humanoid = getCharacterRootAndHumanoid(player)
+	if not root or not humanoid then
+		return
+	end
+	local offset = root.Position - pulse.TargetPosition
+	local horizontalDistance = Vector2.new(offset.X, offset.Z).Magnitude
+	if horizontalDistance <= candidate.ScrapPulseRadius then
+		applyScrapPulseSlow(player, humanoid, attemptToken, attackId, candidate)
+		fireCarrier(player, { Kind = "PULSE_HIT" })
+	else
+		fireCarrier(player, { Kind = "PULSE_DODGED" })
+	end
+end
+
+local function tryStartScrapPulse(
+	player: Player,
+	root: BasePart,
+	humanoid: Humanoid,
+	wardenDistance: number,
+	now: number,
+	attemptToken: number,
+	candidate: Definition
+)
+	if state ~= "CHASE_ACTIVE"
+		or generation ~= attemptToken
+		or carrier ~= player
+		or activeScrapPulse ~= nil
+		or now < nextScrapPulseAt
+		or wardenDistance <= candidate.CatchRadius + 4
+		or not isWardenRuntimePresent()
+	then
+		return
+	end
+	nextScrapPulseId += 1
+	local attackId = nextScrapPulseId
+	local targetPosition = getScrapPulseTargetPosition(player, root, humanoid, candidate)
+	local telegraphModel = createScrapPulseTelegraph(targetPosition, candidate, attackId)
+	activeScrapPulse = {
+		AttackId = attackId,
+		TargetPosition = targetPosition,
+		ResolveAt = now + candidate.ScrapPulseTelegraphSeconds,
+		TelegraphModel = telegraphModel,
+	}
+	nextScrapPulseAt = now + candidate.ScrapPulseCooldownSeconds
+	setWardenPulseWindup(true)
+	task.delay(candidate.ScrapPulseTelegraphSeconds, function()
+		resolveScrapPulse(player, attemptToken, attackId, candidate)
+	end)
 end
 
 local function getAssignedSecureZone(player: Player, candidate: Definition): BasePart?
@@ -733,8 +987,8 @@ end
 local function runChase(player: Player, attemptToken: number, candidate: Definition)
 	local previousClock = os.clock()
 	while generation == attemptToken and carrier == player and state == "CHASE_ACTIVE" do
-		local root = getCharacterRootAndHumanoid(player)
-		if not root then
+		local root, humanoid = getCharacterRootAndHumanoid(player)
+		if not root or not humanoid then
 			failAttempt(player, attemptToken, false, player.Parent == Players)
 			return
 		end
@@ -742,6 +996,9 @@ local function runChase(player: Player, attemptToken: number, candidate: Definit
 		if not chaseRuntime or not ensureAttemptModels(player, root, chaseRuntime) then
 			cancelAttempt(player, attemptToken, "RUNTIME_UNAVAILABLE")
 			return
+		end
+		if activeScrapPulse then
+			setWardenPulseWindup(true)
 		end
 
 		local secureZone = getAssignedSecureZone(player, candidate)
@@ -769,6 +1026,7 @@ local function runChase(player: Player, attemptToken: number, candidate: Definit
 			failAttempt(player, attemptToken, true, true)
 			return
 		end
+		tryStartScrapPulse(player, root, humanoid, distance, now, attemptToken, candidate)
 		task.wait(candidate.PollSeconds)
 	end
 end
@@ -846,7 +1104,7 @@ local function beginAttempt(
 	carryModel = createCarry(player, root)
 	wardenModel = createWarden(chaseRuntime.WardenSpawnMarker)
 	wardenCFrame = chaseRuntime.WardenSpawnMarker.CFrame
-	local springLegsActive = applySpringLegsMovement(player, humanoid, candidate)
+	local springLegsActive = applyChaseMovement(player, humanoid, candidate)
 	activeDeathConnection = humanoid.Died:Connect(function()
 		failAttempt(player, attemptToken, false, player.Parent == Players)
 	end)
@@ -882,11 +1140,10 @@ local function beginAttempt(
 			cancelAttempt(player, attemptToken, "RUNTIME_UNAVAILABLE")
 			return
 		end
-		if springLegsEligibleForAttempt then
-			verifySpringLegsMovement(player, activeHumanoid)
-		end
+		verifyChaseMovement(player, activeHumanoid)
 		setWardenAlarm(true)
 		chaseStartedAt = os.clock()
+		nextScrapPulseAt = chaseStartedAt + candidate.ScrapPulseCooldownSeconds
 		currentStage = 1
 		state = "CHASE_ACTIVE"
 		fireCarrier(player, { Kind = "CHASE_STARTED", Stage = 1 })
@@ -965,13 +1222,19 @@ end
 
 local function handleModularStateChanged(player: Player)
 	if carrier ~= player
-		or not springLegsEligibleForAttempt
 		or (state ~= "ACTIVATING" and state ~= "CHASE_ACTIVE")
-		or ConstructCapabilityResolver.HasSpringLegsChaseCapability(player)
 	then
 		return
 	end
-	restoreChaseMovement(player)
+	local activeOverride = movementOverride
+	if not activeOverride or activeOverride.Player ~= player then
+		return
+	end
+	if springLegsEligibleForAttempt and not ConstructCapabilityResolver.HasSpringLegsChaseCapability(player) then
+		springLegsEligibleForAttempt = false
+		activeOverride.ChaseMultiplier = 1
+		applyDerivedMovement(activeOverride)
+	end
 end
 
 local function createLandmarkLabel(
@@ -1157,6 +1420,9 @@ function FurnacePodChaseService.GetDiagnosticSnapshot(player: Player): Diagnosti
 	local speedMatchesExpected = playerMovement ~= nil
 		and humanoid == playerMovement.Humanoid
 		and math.abs((humanoid :: Humanoid).WalkSpeed - playerMovement.AppliedWalkSpeed) <= 0.01
+	local now = os.clock()
+	local pulse = if isCarrier then activeScrapPulse else nil
+	local pulseDebuffActive = isCarrier and pulseDebuffAttackId ~= nil and pulseDebuffExpiresAt > now
 
 	local phase = state :: string
 	if state == "SECURED" and carrier == nil then
@@ -1173,12 +1439,23 @@ function FurnacePodChaseService.GetDiagnosticSnapshot(player: Player): Diagnosti
 		SpringLegsEligible = isCarrier
 			and activePhase
 			and ConstructCapabilityResolver.HasSpringLegsChaseCapability(player),
-		SpringLegsApplicationRecord = applicationRecord,
-		SpringLegsSpeedMatchesExpected = speedMatchesExpected,
-		SpringLegsEffectApplied = applicationRecord and speedMatchesExpected,
+		SpringLegsApplicationRecord = applicationRecord and springLegsEligibleForAttempt,
+		SpringLegsSpeedMatchesExpected = springLegsEligibleForAttempt and speedMatchesExpected,
+		SpringLegsEffectApplied = applicationRecord and springLegsEligibleForAttempt and speedMatchesExpected,
 		MovementBaselineWalkSpeed = if playerMovement then playerMovement.BaselineWalkSpeed else nil,
-		ExpectedSpringLegsWalkSpeed = if playerMovement then playerMovement.AppliedWalkSpeed else nil,
+		ExpectedSpringLegsWalkSpeed = if playerMovement and springLegsEligibleForAttempt then playerMovement.ChaseWalkSpeed else nil,
 		ConfiguredSpringLegsMultiplier = candidate.SpringLegsSpeedMultiplier,
+		ExpectedCurrentWalkSpeed = if playerMovement then playerMovement.AppliedWalkSpeed else nil,
+		ScrapPulseReady = isCarrier
+			and state == "CHASE_ACTIVE"
+			and pulse == nil
+			and now >= nextScrapPulseAt,
+		ScrapPulseAttackId = nextScrapPulseId,
+		ScrapPulseTelegraphActive = pulse ~= nil,
+		ScrapPulseTargetPosition = if pulse then pulse.TargetPosition else nil,
+		ScrapPulseDebuffActive = pulseDebuffActive,
+		ScrapPulseDebuffMultiplier = candidate.ScrapPulseSlowMultiplier,
+		ScrapPulseDebuffRemaining = if pulseDebuffActive then math.max(0, pulseDebuffExpiresAt - now) else 0,
 		CooldownRemaining = if state == "RESETTING" then math.max(0, cooldownEndsAt - os.clock()) else 0,
 	}
 end

@@ -12,6 +12,7 @@ local FurnacePodChaseController = {}
 
 local banner: TextLabel? = nil
 local abilityToast: TextLabel? = nil
+local pulseToast: TextLabel? = nil
 local dangerOverlay: Frame? = nil
 local explanationBackdrop: Frame? = nil
 local confirmationRemote: RemoteEvent? = nil
@@ -25,6 +26,7 @@ local objectiveConnection: RBXScriptConnection? = nil
 local objectiveDestination: Vector3? = nil
 local presentationToken = 0
 local abilityPresentationToken = 0
+local pulsePresentationToken = 0
 local started = false
 
 local function requireChildOfClass(parent: Instance, childName: string, expectedClassName: string): Instance
@@ -102,6 +104,27 @@ local function createPresentation()
 	abilitySizeConstraint.MinSize = Vector2.new(280, 58)
 	abilitySizeConstraint.Parent = abilityLabel
 	abilityToast = abilityLabel
+
+	local pulseLabel = Instance.new("TextLabel")
+	pulseLabel.Name = "ScrapPulseToast"
+	pulseLabel.AnchorPoint = Vector2.new(0.5, 1)
+	pulseLabel.Position = UDim2.new(0.5, 0, 0.88, 0)
+	pulseLabel.Size = UDim2.new(0.58, 0, 0, 48)
+	pulseLabel.BackgroundColor3 = Color3.fromRGB(62, 31, 24)
+	pulseLabel.BackgroundTransparency = 0.1
+	pulseLabel.BorderSizePixel = 0
+	pulseLabel.Font = Enum.Font.GothamBold
+	pulseLabel.TextColor3 = Color3.fromRGB(255, 185, 91)
+	pulseLabel.TextScaled = true
+	pulseLabel.Visible = false
+	pulseLabel.ZIndex = 15
+	pulseLabel.Parent = screenGui
+
+	local pulseConstraint = Instance.new("UISizeConstraint")
+	pulseConstraint.MaxSize = Vector2.new(390, 48)
+	pulseConstraint.MinSize = Vector2.new(230, 48)
+	pulseConstraint.Parent = pulseLabel
+	pulseToast = pulseLabel
 
 	local edge = Instance.new("Frame")
 	edge.Name = "WorkshopEdgeObjective"
@@ -277,6 +300,42 @@ local function hideSpringLegsActive()
 	abilityPresentationToken += 1
 	if abilityToast then
 		abilityToast.Visible = false
+	end
+end
+
+local function showPulseFeedback(text: string, color: Color3, duration: number)
+	local label = pulseToast
+	if not label then
+		return
+	end
+	pulsePresentationToken += 1
+	local token = pulsePresentationToken
+	label.Text = text
+	label.TextColor3 = color
+	label.TextTransparency = 0
+	label.BackgroundTransparency = 0.1
+	label.Visible = true
+	task.delay(duration, function()
+		if token ~= pulsePresentationToken or not label then
+			return
+		end
+		local tween = TweenService:Create(label, TweenInfo.new(0.22), {
+			TextTransparency = 1,
+			BackgroundTransparency = 1,
+		})
+		tween:Play()
+		tween.Completed:Once(function()
+			if pulsePresentationToken == token then
+				label.Visible = false
+			end
+		end)
+	end)
+end
+
+local function hidePulseFeedback()
+	pulsePresentationToken += 1
+	if pulseToast then
+		pulseToast.Visible = false
 	end
 end
 
@@ -463,6 +522,7 @@ local function clearChasePresentation()
 		dangerOverlay.Visible = false
 	end
 	hideSpringLegsActive()
+	hidePulseFeedback()
 	clearObjectiveCue()
 	RecoveryFeelEffects.Clear()
 end
@@ -533,7 +593,9 @@ local function readPayload(payload: any): (string?, number?, string?, number?, V
 			end
 		end
 		return kind, nil, payload.SignatureId, nil, nil, nil, payload.FirstDiscovery
-	elseif kind == "CAUGHT" or kind == "SECURED" or kind == "CANCELLED" then
+	elseif kind == "CAUGHT" or kind == "SECURED" or kind == "CANCELLED"
+		or kind == "PULSE_HIT" or kind == "PULSE_DODGED"
+	then
 		for key in pairs(payload) do
 			if key ~= "Kind" then
 				return nil, nil, nil, nil, nil, nil, nil
@@ -624,6 +686,11 @@ function FurnacePodChaseController.Start()
 			)
 		elseif kind == "CANCELLED" then
 			clearChasePresentation()
+		elseif kind == "PULSE_HIT" then
+			RecoveryFeelEffects.ScrapPulseHit()
+			showPulseFeedback("SCRAP PULSE HIT\nMOVEMENT DISRUPTED", Color3.fromRGB(255, 134, 82), 1.05)
+		elseif kind == "PULSE_DODGED" then
+			showPulseFeedback("SCRAP PULSE DODGED", Color3.fromRGB(255, 213, 109), 0.65)
 		end
 	end)
 end

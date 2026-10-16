@@ -50,6 +50,12 @@ local function formatString(value: any): string
 	return if typeof(value) == "string" and #value <= 512 then value else "N/A"
 end
 
+local function formatVector3(value: any): string
+	return if typeof(value) == "Vector3"
+		then string.format("(%.1f, %.1f, %.1f)", value.X, value.Y, value.Z)
+		else "N/A"
+end
+
 local function renderSnapshot(payload: any)
 	local label = diagnosticsLabel
 	if not label or typeof(payload) ~= "table" then
@@ -100,7 +106,7 @@ local function renderSnapshot(payload: any)
 		string.format("Current: %s", formatNumber(payload.WalkSpeed)),
 		string.format("Eligible: %s", formatBoolean(payload.SpringLegsEligible)),
 		string.format("Application Record: %s", formatBoolean(payload.SpringLegsApplicationRecord)),
-		string.format("Speed Matches Expected: %s", formatBoolean(payload.SpringLegsSpeedMatchesExpected)),
+		string.format("Movement Matches Derived: %s", formatBoolean(payload.SpringLegsSpeedMatchesExpected)),
 		string.format("Applied: %s", formatBoolean(payload.SpringLegsEffectApplied)),
 		string.format("DEV Override: %s", formatBoolean(payload.DevWalkSpeedOverride)),
 		string.format("Override Value: %s", formatNumber(payload.DevOverrideWalkSpeed)),
@@ -113,6 +119,16 @@ local function renderSnapshot(payload: any)
 		string.format("WardenStage: %s", wardenStage),
 		string.format("Carry Runtime Present: %s", formatBoolean(payload.CarryRuntimePresent)),
 		string.format("Warden Runtime Present: %s", formatBoolean(payload.WardenRuntimePresent)),
+		"",
+		"SCRAP PULSE",
+		string.format("Ready: %s", formatBoolean(payload.ScrapPulseReady)),
+		string.format("AttackId: %s", formatInteger(payload.ScrapPulseAttackId)),
+		string.format("Telegraph Active: %s", formatBoolean(payload.ScrapPulseTelegraphActive)),
+		string.format("Target: %s", formatVector3(payload.ScrapPulseTargetPosition)),
+		string.format("Debuff Active: %s", formatBoolean(payload.ScrapPulseDebuffActive)),
+		string.format("Debuff Multiplier: %s", formatNumber(payload.ScrapPulseDebuffMultiplier)),
+		string.format("Debuff Remaining: %ss", formatNumber(payload.ScrapPulseDebuffRemaining)),
+		string.format("Derived WalkSpeed: %s", formatNumber(payload.ExpectedCurrentWalkSpeed)),
 		string.format("Furnace Cooldown: %ss", formatNumber(payload.FurnaceCooldownRemaining)),
 		string.format("AssignedWorkshop: %s", formatString(payload.AssignedPlotId)),
 		"",

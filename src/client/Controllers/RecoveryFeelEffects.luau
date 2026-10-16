@@ -228,6 +228,11 @@ function RecoveryFeelEffects.Secured()
 	impulseFieldOfView(3)
 end
 
+function RecoveryFeelEffects.ScrapPulseHit()
+	flash(Color3.fromRGB(255, 96, 38), 0.84, 0.04)
+	impulseFieldOfView(-1.5)
+end
+
 function RecoveryFeelEffects.Revealed(color: Color3, major: boolean)
 	flash(color, if major then 0.65 else 0.78, if major then 0.16 else 0.08)
 	impulseFieldOfView(if major then 5 else 2.5)
