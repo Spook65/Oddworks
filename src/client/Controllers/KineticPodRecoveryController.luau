@@ -16,6 +16,12 @@ local KINETIC_OBJECTIVE_TEXT = "RECOVER THE KINETIC POD"
 local KINETIC_NEAR_ENTER_DISTANCE = 10
 local KINETIC_NEAR_EXIT_DISTANCE = 13
 local KINETIC_MARKER_MAX_DISTANCE = 500
+local EDGE_DEFAULT_WIDTH = 220
+local EDGE_DEFAULT_HEIGHT = 42
+local EDGE_HORIZONTAL_PADDING = 7
+local EDGE_DESKTOP_MIN_X = 117
+local EDGE_DESKTOP_MIN_Y = 105
+local EDGE_DESKTOP_BOTTOM_INSET = 55
 
 local banner: TextLabel? = nil
 local objectiveTarget: Part? = nil
@@ -174,6 +180,10 @@ local function updateObjective()
 	end
 	local viewportPoint, onScreen = camera:WorldToViewportPoint(destination)
 	local viewportSize = camera.ViewportSize
+	if viewportSize.X <= 0 or viewportSize.Y <= 0 then
+		edge.Visible = false
+		return
+	end
 	if objectiveIsFreshKinetic then
 		local mode = kineticGuidanceMode
 		if mode == "NEAR" then
@@ -233,9 +243,31 @@ local function updateObjective()
 		math.max(center.Y - 115, 1) / math.max(math.abs(unit.Y), 0.001)
 	)
 	local position = center + unit * scale
+	local edgeWidth = math.min(EDGE_DEFAULT_WIDTH, math.max(viewportSize.X - EDGE_HORIZONTAL_PADDING * 2, 1))
+	local edgeHeight = math.min(EDGE_DEFAULT_HEIGHT, viewportSize.Y)
+	edge.Size = UDim2.fromOffset(edgeWidth, edgeHeight)
+
+	local halfEdgeWidth = edgeWidth * 0.5
+	local halfEdgeHeight = edgeHeight * 0.5
+	local visibleMinX = halfEdgeWidth
+	local visibleMaxX = math.max(visibleMinX, viewportSize.X - halfEdgeWidth)
+	local visibleMinY = halfEdgeHeight
+	local visibleMaxY = math.max(visibleMinY, viewportSize.Y - halfEdgeHeight)
+	local minX = math.clamp(EDGE_DESKTOP_MIN_X, visibleMinX, visibleMaxX)
+	local maxX = math.clamp(viewportSize.X - EDGE_DESKTOP_MIN_X, visibleMinX, visibleMaxX)
+	local minY = math.clamp(EDGE_DESKTOP_MIN_Y, visibleMinY, visibleMaxY)
+	local maxY = math.clamp(viewportSize.Y - EDGE_DESKTOP_BOTTOM_INSET, visibleMinY, visibleMaxY)
+	if maxX < minX then
+		minX = center.X
+		maxX = center.X
+	end
+	if maxY < minY then
+		minY = center.Y
+		maxY = center.Y
+	end
 	position = Vector2.new(
-		math.clamp(position.X, 117, viewportSize.X - 117),
-		math.clamp(position.Y, 105, viewportSize.Y - 55)
+		math.clamp(position.X, minX, maxX),
+		math.clamp(position.Y, minY, maxY)
 	)
 	edge.Position = UDim2.fromOffset(position.X, position.Y)
 	arrow.Rotation = math.deg(math.atan2(unit.Y, unit.X))
