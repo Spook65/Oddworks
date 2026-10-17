@@ -13,6 +13,8 @@ local FurnacePodChaseController = {}
 local banner: TextLabel? = nil
 local abilityToast: TextLabel? = nil
 local pulseToast: TextLabel? = nil
+local pulseForecastModel: Model? = nil
+local pulseForecastAttackId: number? = nil
 local dangerOverlay: Frame? = nil
 local explanationBackdrop: Frame? = nil
 local confirmationRemote: RemoteEvent? = nil
@@ -27,6 +29,7 @@ local objectiveDestination: Vector3? = nil
 local presentationToken = 0
 local abilityPresentationToken = 0
 local pulsePresentationToken = 0
+local pulseForecastToken = 0
 local started = false
 
 local function requireChildOfClass(parent: Instance, childName: string, expectedClassName: string): Instance
@@ -339,6 +342,86 @@ local function hidePulseFeedback()
 	end
 end
 
+local function clearPulseForecast()
+	pulseForecastToken += 1
+	pulseForecastAttackId = nil
+	if pulseForecastModel then
+		pulseForecastModel:Destroy()
+		pulseForecastModel = nil
+	end
+end
+
+local function showPulseForecast(attackId: number, targetPosition: Vector3, duration: number)
+	clearPulseForecast()
+	pulseForecastAttackId = attackId
+	local token = pulseForecastToken
+	local model = Instance.new("Model")
+	model.Name = string.format("LocalScrapPulseForecast_%d", attackId)
+	model:SetAttribute("AttackId", attackId)
+
+	local orientation = CFrame.new(targetPosition) * CFrame.Angles(0, 0, math.rad(90))
+	local outline = Instance.new("Part")
+	outline.Name = "ForecastOutline"
+	outline.Anchored = true
+	outline.CanCollide = false
+	outline.CanQuery = false
+	outline.CanTouch = false
+	outline.CastShadow = false
+	outline.Shape = Enum.PartType.Cylinder
+	outline.Size = Vector3.new(0.08, 15, 15)
+	outline.CFrame = orientation
+	outline.Color = Color3.fromRGB(73, 234, 255)
+	outline.Material = Enum.Material.Neon
+	outline.Transparency = 0.78
+	outline.Parent = model
+
+	local focus = Instance.new("Part")
+	focus.Name = "ForecastFocus"
+	focus.Anchored = true
+	focus.CanCollide = false
+	focus.CanQuery = false
+	focus.CanTouch = false
+	focus.CastShadow = false
+	focus.Shape = Enum.PartType.Cylinder
+	focus.Size = Vector3.new(0.1, 2.2, 2.2)
+	focus.CFrame = orientation * CFrame.new(-0.03, 0, 0)
+	focus.Color = Color3.fromRGB(164, 247, 255)
+	focus.Material = Enum.Material.Neon
+	focus.Transparency = 0.46
+	focus.Parent = model
+
+	local marker = Instance.new("BillboardGui")
+	marker.Name = "ForecastLabel"
+	marker.Adornee = focus
+	marker.AlwaysOnTop = true
+	marker.Size = UDim2.fromOffset(150, 30)
+	marker.StudsOffsetWorldSpace = Vector3.new(0, 2.2, 0)
+	marker.Parent = focus
+	local markerText = Instance.new("TextLabel")
+	markerText.Size = UDim2.fromScale(1, 1)
+	markerText.BackgroundColor3 = Color3.fromRGB(12, 50, 58)
+	markerText.BackgroundTransparency = 0.24
+	markerText.BorderSizePixel = 0
+	markerText.Font = Enum.Font.GothamBold
+	markerText.Text = "PULSE FORECAST"
+	markerText.TextColor3 = Color3.fromRGB(164, 247, 255)
+	markerText.TextSize = 13
+	markerText.Parent = marker
+
+	model.Parent = Workspace
+	pulseForecastModel = model
+	TweenService:Create(
+		outline,
+		TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Transparency = 0.56, Size = Vector3.new(0.08, 13.5, 13.5) }
+	):Play()
+	task.delay(duration, function()
+		if pulseForecastToken == token and pulseForecastAttackId == attackId then
+			clearPulseForecast()
+		end
+	end)
+end
+
 local function clearObjectiveCue()
 	if objectiveConnection then
 		objectiveConnection:Disconnect()
@@ -523,6 +606,7 @@ local function clearChasePresentation()
 	end
 	hideSpringLegsActive()
 	hidePulseFeedback()
+	clearPulseForecast()
 	clearObjectiveCue()
 	RecoveryFeelEffects.Clear()
 end
@@ -537,18 +621,18 @@ local function isFiniteVector3(value: any): boolean
 		and math.abs(value.Z) < math.huge
 end
 
-local function readPayload(payload: any): (string?, number?, string?, number?, Vector3?, boolean?, boolean?)
+local function readPayload(payload: any): (string?, number?, string?, number?, Vector3?, boolean?, boolean?, number?)
 	if typeof(payload) ~= "table" or typeof(payload.Kind) ~= "string" then
-		return nil, nil, nil, nil, nil, nil, nil
+		return nil, nil, nil, nil, nil, nil, nil, nil
 	end
 	local kind = payload.Kind
 	if kind == "EXPLANATION" then
 		for key in pairs(payload) do
 			if key ~= "Kind" then
-				return nil, nil, nil, nil, nil, nil, nil
+				return nil, nil, nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, nil, nil, nil, nil, nil, nil
+		return kind, nil, nil, nil, nil, nil, nil, nil
 	elseif kind == "ACTIVATING" then
 		if typeof(payload.HeadStartSeconds) ~= "number"
 			or payload.HeadStartSeconds < 1
@@ -556,7 +640,7 @@ local function readPayload(payload: any): (string?, number?, string?, number?, V
 			or not isFiniteVector3(payload.DestinationPosition)
 			or typeof(payload.SpringLegsActive) ~= "boolean"
 		then
-			return nil, nil, nil, nil, nil, nil, nil
+			return nil, nil, nil, nil, nil, nil, nil, nil
 		end
 		for key in pairs(payload) do
 			if key ~= "Kind"
@@ -564,20 +648,37 @@ local function readPayload(payload: any): (string?, number?, string?, number?, V
 				and key ~= "DestinationPosition"
 				and key ~= "SpringLegsActive"
 			then
-				return nil, nil, nil, nil, nil, nil, nil
+				return nil, nil, nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, nil, nil, payload.HeadStartSeconds, payload.DestinationPosition, payload.SpringLegsActive, nil
+		return kind, nil, nil, payload.HeadStartSeconds, payload.DestinationPosition, payload.SpringLegsActive, nil, nil
 	elseif kind == "CHASE_STARTED" or kind == "STAGE" then
 		if typeof(payload.Stage) ~= "number" or payload.Stage % 1 ~= 0 or payload.Stage < 1 or payload.Stage > 3 then
-			return nil, nil, nil, nil, nil, nil, nil
+			return nil, nil, nil, nil, nil, nil, nil, nil
 		end
 		for key in pairs(payload) do
 			if key ~= "Kind" and key ~= "Stage" then
-				return nil, nil, nil, nil, nil, nil, nil
+				return nil, nil, nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, payload.Stage, nil, nil, nil, nil, nil
+		return kind, payload.Stage, nil, nil, nil, nil, nil, nil
+	elseif kind == "PULSE_FORECAST" then
+		if typeof(payload.AttackId) ~= "number"
+			or payload.AttackId < 1
+			or payload.AttackId % 1 ~= 0
+			or not isFiniteVector3(payload.TargetPosition)
+			or typeof(payload.ForecastDuration) ~= "number"
+			or payload.ForecastDuration <= 0
+			or payload.ForecastDuration > 0.75
+		then
+			return nil, nil, nil, nil, nil, nil, nil, nil
+		end
+		for key in pairs(payload) do
+			if key ~= "Kind" and key ~= "AttackId" and key ~= "TargetPosition" and key ~= "ForecastDuration" then
+				return nil, nil, nil, nil, nil, nil, nil, nil
+			end
+		end
+		return kind, nil, nil, payload.ForecastDuration, payload.TargetPosition, nil, nil, payload.AttackId
 	elseif kind == "REVEALED" then
 		if payload.SignatureId ~= "Kilnback"
 			or typeof(payload.OwnedCount) ~= "number"
@@ -585,25 +686,25 @@ local function readPayload(payload: any): (string?, number?, string?, number?, V
 			or payload.OwnedCount % 1 ~= 0
 			or typeof(payload.FirstDiscovery) ~= "boolean"
 		then
-			return nil, nil, nil, nil, nil, nil, nil
+			return nil, nil, nil, nil, nil, nil, nil, nil
 		end
 		for key in pairs(payload) do
 			if key ~= "Kind" and key ~= "SignatureId" and key ~= "OwnedCount" and key ~= "FirstDiscovery" then
-				return nil, nil, nil, nil, nil, nil, nil
+				return nil, nil, nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, nil, payload.SignatureId, nil, nil, nil, payload.FirstDiscovery
+		return kind, nil, payload.SignatureId, nil, nil, nil, payload.FirstDiscovery, nil
 	elseif kind == "CAUGHT" or kind == "SECURED" or kind == "CANCELLED"
 		or kind == "PULSE_HIT" or kind == "PULSE_DODGED"
 	then
 		for key in pairs(payload) do
 			if key ~= "Kind" then
-				return nil, nil, nil, nil, nil, nil, nil
+				return nil, nil, nil, nil, nil, nil, nil, nil
 			end
 		end
-		return kind, nil, nil, nil, nil, nil, nil
+		return kind, nil, nil, nil, nil, nil, nil, nil
 	end
-	return nil, nil, nil, nil, nil, nil, nil
+	return nil, nil, nil, nil, nil, nil, nil, nil
 end
 
 function FurnacePodChaseController.Start()
@@ -620,7 +721,7 @@ function FurnacePodChaseController.Start()
 		clearChasePresentation()
 	end)
 	stateRemote.OnClientEvent:Connect(function(payload: any)
-		local kind, stage, revealText, headStartSeconds, destinationPosition, springLegsActive, firstDiscovery = readPayload(payload)
+		local kind, stage, revealText, headStartSeconds, destinationPosition, springLegsActive, firstDiscovery, attackId = readPayload(payload)
 		if not kind then
 			return
 		end
@@ -664,18 +765,23 @@ function FurnacePodChaseController.Start()
 				0,
 				true
 			)
+		elseif kind == "PULSE_FORECAST" then
+			showPulseForecast(attackId :: number, destinationPosition :: Vector3, headStartSeconds :: number)
 		elseif kind == "CAUGHT" then
 			hideSpringLegsActive()
+			clearPulseForecast()
 			clearObjectiveCue()
 			RecoveryFeelEffects.Caught()
 			showMessage("CAUGHT - FURNACE POD LOST\nBANKED INVENTORY AND BUILDS ARE SAFE", Color3.fromRGB(255, 92, 73), 2.2, false)
 		elseif kind == "SECURED" then
 			hideSpringLegsActive()
+			clearPulseForecast()
 			clearObjectiveCue()
 			RecoveryFeelEffects.Secured()
 			showMessage("POD SECURED\nKILNBACK REVEAL INCOMING", Color3.fromRGB(95, 244, 154), 0, false)
 		elseif kind == "REVEALED" then
 			hideSpringLegsActive()
+			clearPulseForecast()
 			clearObjectiveCue()
 			RecoveryFeelEffects.Revealed(Color3.fromRGB(255, 133, 36), true)
 			showMessage(
@@ -687,9 +793,11 @@ function FurnacePodChaseController.Start()
 		elseif kind == "CANCELLED" then
 			clearChasePresentation()
 		elseif kind == "PULSE_HIT" then
+			clearPulseForecast()
 			RecoveryFeelEffects.ScrapPulseHit()
 			showPulseFeedback("SCRAP PULSE HIT\nMOVEMENT DISRUPTED", Color3.fromRGB(255, 134, 82), 1.05)
 		elseif kind == "PULSE_DODGED" then
+			clearPulseForecast()
 			showPulseFeedback("SCRAP PULSE DODGED", Color3.fromRGB(255, 213, 109), 0.65)
 		end
 	end)

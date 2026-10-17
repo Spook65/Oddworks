@@ -47,7 +47,9 @@ type ScrapPulseState = {
 	AttackId: number,
 	TargetPosition: Vector3,
 	ResolveAt: number,
-	TelegraphModel: Model,
+	ForecastEligible: boolean,
+	ForecastSent: boolean,
+	TelegraphModel: Model?,
 }
 export type DiagnosticSnapshot = {
 	Phase: string,
@@ -64,6 +66,10 @@ export type DiagnosticSnapshot = {
 	ExpectedSpringLegsWalkSpeed: number?,
 	ConfiguredSpringLegsMultiplier: number,
 	ExpectedCurrentWalkSpeed: number?,
+	SignalScannerInstalled: boolean,
+	PulseForecastCapability: boolean,
+	ConfiguredScrapPulseForecastSeconds: number,
+	ScrapPulseForecastSent: boolean,
 	ScrapPulseReady: boolean,
 	ScrapPulseAttackId: number,
 	ScrapPulseTelegraphActive: boolean,
@@ -171,6 +177,8 @@ local function validateDefinition(candidate: Definition)
 		or not isPositiveFinite(candidate.StageSpeeds[1])
 		or not isPositiveFinite(candidate.StageSpeeds[2])
 		or not isPositiveFinite(candidate.StageSpeeds[3])
+		or not isPositiveFinite(candidate.ScrapPulseForecastSeconds)
+		or candidate.ScrapPulseForecastSeconds > 0.75
 		or not isPositiveFinite(candidate.ScrapPulseTelegraphSeconds)
 		or candidate.ScrapPulseTelegraphSeconds < 0.8
 		or candidate.ScrapPulseTelegraphSeconds > 1.1
@@ -340,8 +348,9 @@ end
 local function destroyScrapPulseTelegraph()
 	local pulse = activeScrapPulse
 	activeScrapPulse = nil
-	if pulse and pulse.TelegraphModel.Parent ~= nil then
-		pulse.TelegraphModel:Destroy()
+	local telegraphModel = if pulse then pulse.TelegraphModel else nil
+	if telegraphModel and telegraphModel.Parent ~= nil then
+		telegraphModel:Destroy()
 	end
 end
 
@@ -744,14 +753,17 @@ local function resolveScrapPulse(player: Player, attemptToken: number, attackId:
 	end
 	activeScrapPulse = nil
 	setWardenPulseWindup(false)
-	for _, descendant in ipairs(pulse.TelegraphModel:GetDescendants()) do
-		if descendant:IsA("BasePart") then
-			descendant.Color = Color3.fromRGB(255, 214, 90)
-			descendant.Transparency = 0.08
-			TweenService:Create(descendant, TweenInfo.new(0.2), { Transparency = 1 }):Play()
+	local telegraphModel = pulse.TelegraphModel
+	if telegraphModel then
+		for _, descendant in ipairs(telegraphModel:GetDescendants()) do
+			if descendant:IsA("BasePart") then
+				descendant.Color = Color3.fromRGB(255, 214, 90)
+				descendant.Transparency = 0.08
+				TweenService:Create(descendant, TweenInfo.new(0.2), { Transparency = 1 }):Play()
+			end
 		end
+		Debris:AddItem(telegraphModel, 0.25)
 	end
-	Debris:AddItem(pulse.TelegraphModel, 0.25)
 
 	local root, humanoid = getCharacterRootAndHumanoid(player)
 	if not root or not humanoid then
@@ -765,6 +777,30 @@ local function resolveScrapPulse(player: Player, attemptToken: number, attackId:
 	else
 		fireCarrier(player, { Kind = "PULSE_DODGED" })
 	end
+end
+
+local function beginPublicScrapPulseTelegraph(
+	player: Player,
+	attemptToken: number,
+	attackId: number,
+	candidate: Definition
+)
+	local pulse = activeScrapPulse
+	if generation ~= attemptToken
+		or carrier ~= player
+		or state ~= "CHASE_ACTIVE"
+		or not pulse
+		or pulse.AttackId ~= attackId
+		or pulse.TelegraphModel ~= nil
+	then
+		return
+	end
+
+	pulse.TelegraphModel = createScrapPulseTelegraph(pulse.TargetPosition, candidate, attackId)
+	setWardenPulseWindup(true)
+	task.delay(candidate.ScrapPulseTelegraphSeconds, function()
+		resolveScrapPulse(player, attemptToken, attackId, candidate)
+	end)
 end
 
 local function tryStartScrapPulse(
@@ -789,17 +825,26 @@ local function tryStartScrapPulse(
 	nextScrapPulseId += 1
 	local attackId = nextScrapPulseId
 	local targetPosition = getScrapPulseTargetPosition(player, root, humanoid, candidate)
-	local telegraphModel = createScrapPulseTelegraph(targetPosition, candidate, attackId)
+	local forecastEligible = ConstructCapabilityResolver.HasScrapPulseForecastCapability(player)
 	activeScrapPulse = {
 		AttackId = attackId,
 		TargetPosition = targetPosition,
-		ResolveAt = now + candidate.ScrapPulseTelegraphSeconds,
-		TelegraphModel = telegraphModel,
+		ResolveAt = now + candidate.ScrapPulseForecastSeconds + candidate.ScrapPulseTelegraphSeconds,
+		ForecastEligible = forecastEligible,
+		ForecastSent = forecastEligible,
+		TelegraphModel = nil,
 	}
 	nextScrapPulseAt = now + candidate.ScrapPulseCooldownSeconds
-	setWardenPulseWindup(true)
-	task.delay(candidate.ScrapPulseTelegraphSeconds, function()
-		resolveScrapPulse(player, attemptToken, attackId, candidate)
+	if forecastEligible then
+		fireCarrier(player, {
+			Kind = "PULSE_FORECAST",
+			AttackId = attackId,
+			TargetPosition = targetPosition,
+			ForecastDuration = candidate.ScrapPulseForecastSeconds,
+		})
+	end
+	task.delay(candidate.ScrapPulseForecastSeconds, function()
+		beginPublicScrapPulseTelegraph(player, attemptToken, attackId, candidate)
 	end)
 end
 
@@ -997,7 +1042,7 @@ local function runChase(player: Player, attemptToken: number, candidate: Definit
 			cancelAttempt(player, attemptToken, "RUNTIME_UNAVAILABLE")
 			return
 		end
-		if activeScrapPulse then
+		if activeScrapPulse and activeScrapPulse.TelegraphModel ~= nil then
 			setWardenPulseWindup(true)
 		end
 
@@ -1446,12 +1491,18 @@ function FurnacePodChaseService.GetDiagnosticSnapshot(player: Player): Diagnosti
 		ExpectedSpringLegsWalkSpeed = if playerMovement and springLegsEligibleForAttempt then playerMovement.ChaseWalkSpeed else nil,
 		ConfiguredSpringLegsMultiplier = candidate.SpringLegsSpeedMultiplier,
 		ExpectedCurrentWalkSpeed = if playerMovement then playerMovement.AppliedWalkSpeed else nil,
+		SignalScannerInstalled = ConstructCapabilityResolver.HasScrapPulseForecastCapability(player),
+		PulseForecastCapability = ConstructCapabilityResolver.HasScrapPulseForecastCapability(player),
+		ConfiguredScrapPulseForecastSeconds = candidate.ScrapPulseForecastSeconds,
+		ScrapPulseForecastSent = pulse ~= nil and pulse.ForecastSent,
 		ScrapPulseReady = isCarrier
 			and state == "CHASE_ACTIVE"
 			and pulse == nil
 			and now >= nextScrapPulseAt,
-		ScrapPulseAttackId = nextScrapPulseId,
-		ScrapPulseTelegraphActive = pulse ~= nil,
+		ScrapPulseAttackId = if pulse then pulse.AttackId else 0,
+		ScrapPulseTelegraphActive = pulse ~= nil
+			and pulse.TelegraphModel ~= nil
+			and (pulse.TelegraphModel :: Model).Parent ~= nil,
 		ScrapPulseTargetPosition = if pulse then pulse.TargetPosition else nil,
 		ScrapPulseDebuffActive = pulseDebuffActive,
 		ScrapPulseDebuffMultiplier = candidate.ScrapPulseSlowMultiplier,

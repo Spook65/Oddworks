@@ -28,6 +28,10 @@ function ConstructCapabilityResolver.CanDetectStrangeSignals(player: Player): bo
 	return getInstalledComponentId(player, "Head") == SIGNAL_SCANNER_COMPONENT_ID
 end
 
+function ConstructCapabilityResolver.HasScrapPulseForecastCapability(player: Player): boolean
+	return getInstalledComponentId(player, "Head") == SIGNAL_SCANNER_COMPONENT_ID
+end
+
 function ConstructCapabilityResolver.HasSpringLegsChaseCapability(player: Player): boolean
 	return getInstalledComponentId(player, "Legs") == SPRING_LEGS_COMPONENT_ID
 end

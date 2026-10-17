@@ -46,6 +46,7 @@ local RARITY_ORDER: { [string]: number } = {
 	Legendary = 3,
 }
 local COMPONENT_DESCRIPTIONS: { [string]: string } = {
+	SignalScanner = "Scrap Pulse early warning",
 	SpringLegs = "Chase mobility boost",
 }
 
@@ -542,8 +543,15 @@ function AssemblyController.Start()
 		end
 
 		if resultCode == "ASSEMBLY_SUCCESS" and (mode == "ASSEMBLED" or mode == "REBUILT") then
+			local selectedHead = getSelectedOption("Head")
 			local selectedLegs = getSelectedOption("Legs")
-			if selectedLegs and selectedLegs.ComponentId == "SpringLegs" then
+			local hasSignalScanner = selectedHead ~= nil and selectedHead.ComponentId == "SignalScanner"
+			local hasSpringLegs = selectedLegs ~= nil and selectedLegs.ComponentId == "SpringLegs"
+			if hasSignalScanner and hasSpringLegs then
+				showFeedback("SIGNALSCANNER + SPRINGLEGS INSTALLED - Pulse forecast and chase mobility active.", true)
+			elseif hasSignalScanner then
+				showFeedback("SIGNALSCANNER INSTALLED - Scrap Pulse early warning active.", true)
+			elseif hasSpringLegs then
 				showFeedback("SPRINGLEGS INSTALLED - Chase mobility boost ready for recovery escapes.", true)
 			else
 				showFeedback(if mode == "ASSEMBLED" then "Prototype Construct assembled." else "Prototype Construct rebuilt.", true)

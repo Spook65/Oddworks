@@ -188,6 +188,7 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 		baselineWalkSpeed = if speedOverride then speedOverride.BaselineWalkSpeed else currentWalkSpeed
 	end
 	local hasSpringLegs = ConstructCapabilityResolver.HasSpringLegsChaseCapability(player)
+	local hasPulseForecast = ConstructCapabilityResolver.HasScrapPulseForecastCapability(player)
 	local expectedWalkSpeed = chase.ExpectedSpringLegsWalkSpeed
 	if expectedWalkSpeed == nil and hasSpringLegs and baselineWalkSpeed ~= nil then
 		expectedWalkSpeed = baselineWalkSpeed * chase.ConfiguredSpringLegsMultiplier
@@ -246,6 +247,11 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 		Construct = constructView,
 		DetectStrangeSignals = ConstructCapabilityResolver.CanDetectStrangeSignals(player),
 		SpringLegsChaseCapability = hasSpringLegs,
+		SignalScannerInstalled = hasPulseForecast,
+		PulseForecastCapability = hasPulseForecast,
+		PulseForecastLead = if hasPulseForecast then chase.ConfiguredScrapPulseForecastSeconds else nil,
+		SpringLegsInstalled = hasSpringLegs,
+		ChaseMobilityMultiplier = if hasSpringLegs then chase.ConfiguredSpringLegsMultiplier else 1,
 		SpringLegsEffectApplied = chase.SpringLegsEffectApplied,
 		SpringLegsApplicationRecord = chase.SpringLegsApplicationRecord,
 		SpringLegsSpeedMatchesExpected = chase.SpringLegsSpeedMatchesExpected,
@@ -263,6 +269,7 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 		WardenRuntimePresent = chase.WardenRuntimePresent,
 		ScrapPulseReady = chase.ScrapPulseReady,
 		ScrapPulseAttackId = chase.ScrapPulseAttackId,
+		PulseForecastSent = chase.ScrapPulseForecastSent,
 		ScrapPulseTelegraphActive = chase.ScrapPulseTelegraphActive,
 		ScrapPulseTargetPosition = chase.ScrapPulseTargetPosition,
 		ScrapPulseDebuffActive = chase.ScrapPulseDebuffActive,
