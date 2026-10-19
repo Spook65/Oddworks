@@ -18,7 +18,7 @@ local RecoveryCarrierRegistry = require(Services:WaitForChild("RecoveryCarrierRe
 local SignatureDiscoveryService = require(Services:WaitForChild("SignatureDiscoveryService"))
 local WorkshopService = require(Services:WaitForChild("WorkshopService"))
 
-type ChaseState = "AVAILABLE" | "STOLEN" | "ACTIVATING" | "CHASE_ACTIVE" | "RESETTING" | "SECURED"
+type ChaseState = "AVAILABLE" | "STOLEN" | "ACTIVATING" | "CHASE_ACTIVE" | "DROPPED_CONTESTED" | "RECLAIMING" | "RESETTING" | "SECURED"
 type Definition = FurnacePodChaseConfig.FurnacePodChaseDefinition
 type PartPresentation = {
 	Transparency: number,
@@ -66,6 +66,18 @@ export type DiagnosticSnapshot = {
 	ExpectedSpringLegsWalkSpeed: number?,
 	ConfiguredSpringLegsMultiplier: number,
 	ExpectedCurrentWalkSpeed: number?,
+	PossessionId: number,
+	CarrierUserId: number?,
+	DroppedPosition: Vector3?,
+	DroppedInteractionPosition: Vector3?,
+	ClaimOpenRemaining: number,
+	DropTimeoutRemaining: number,
+	WardenDistanceToDroppedPod: number?,
+	WardenReclaimRadius: number,
+	WardenReclaimEligible: boolean,
+	LastDisruptorUserId: number?,
+	DisruptCooldownRemaining: number,
+	PostClaimProtectionRemaining: number,
 	SignalScannerInstalled: boolean,
 	PulseForecastCapability: boolean,
 	ConfiguredScrapPulseForecastSeconds: number,
@@ -90,12 +102,14 @@ local CARRY_BASE_CFRAME = CFrame.new(0, 0.4, -1.85) * CFrame.Angles(math.rad(-6)
 local state: ChaseState = "AVAILABLE"
 local carrier: Player? = nil
 local generation = 0
+local possessionId = 0
 local chaseStartedAt = 0
 local currentStage = 0
 local hasSeenExplanation: { [Player]: boolean } = {}
 local pendingConfirmations: { [Player]: number } = {}
 local lastAttemptTimes: { [Player]: number } = {}
 local lastConfirmationTimes: { [Player]: number } = {}
+local lastDisruptTimes: { [Player]: number } = {}
 local movementOverride: MovementOverride? = nil
 local springLegsEligibleForAttempt = false
 local nextScrapPulseAt = 0
@@ -105,6 +119,12 @@ local pulseDebuffAttackId: number? = nil
 local pulseDebuffExpiresAt = 0
 local activeDeathConnection: RBXScriptConnection? = nil
 local carryModel: Model? = nil
+local droppedModel: Model? = nil
+local droppedPosition: Vector3? = nil
+local claimOpenAt = 0
+local dropTimeoutAt = 0
+local lastDisruptorUserId: number? = nil
+local postClaimProtectionEndsAt = 0
 local wardenModel: Model? = nil
 local wardenCFrame: CFrame? = nil
 local runtimeFolder: Folder? = nil
@@ -113,6 +133,8 @@ local definition: Definition? = nil
 local stateRemote: RemoteEvent? = nil
 local cooldownEndsAt = 0
 local started = false
+local disruptPromptHandler: ((Player, number, number) -> ())? = nil
+local claimPromptHandler: ((Player, number, number) -> ())? = nil
 
 local function requireChildOfClass(parent: Instance, childName: string, expectedClassName: string): Instance
 	local child = parent:FindFirstChild(childName)
@@ -190,6 +212,29 @@ local function validateDefinition(candidate: Definition)
 		or not isPositiveFinite(candidate.ScrapPulseSlowMultiplier)
 		or candidate.ScrapPulseSlowMultiplier >= 1
 		or not isPositiveFinite(candidate.ScrapPulseSlowSeconds)
+		or not isPositiveFinite(candidate.DisruptRange)
+		or candidate.DisruptRange > 12
+		or not isPositiveFinite(candidate.DisruptCooldownSeconds)
+		or not isPositiveFinite(candidate.ClaimGraceSeconds)
+		or candidate.ClaimGraceSeconds > 1
+		or not isPositiveFinite(candidate.ClaimRange)
+		or candidate.ClaimRange > 12
+		or not isPositiveFinite(candidate.ClaimAnchorHeight)
+		or candidate.ClaimAnchorHeight > 5
+		or not isPositiveFinite(candidate.DropPlacementDistance)
+		or candidate.DropPlacementDistance < candidate.DisruptRange * 0.5
+		or candidate.DropPlacementDistance > candidate.DisruptRange
+		or not isPositiveFinite(candidate.WardenReclaimRadius)
+		or candidate.WardenReclaimRadius > candidate.ClaimRange
+		or candidate.WardenReclaimRadius > 8
+		or not isPositiveFinite(candidate.ReclaimHeadStartSeconds)
+		or candidate.ReclaimHeadStartSeconds > 2
+		or not isPositiveFinite(candidate.PostClaimProtectionSeconds)
+		or candidate.PostClaimProtectionSeconds < candidate.ReclaimHeadStartSeconds
+		or not isPositiveFinite(candidate.ReclaimPulseDelaySeconds)
+		or candidate.ReclaimPulseDelaySeconds < 2
+		or not isPositiveFinite(candidate.DroppedTimeoutSeconds)
+		or candidate.DroppedTimeoutSeconds < 3
 		or not isPositiveFinite(candidate.ResetSeconds)
 		or not isPositiveFinite(candidate.SuccessCooldownSeconds)
 		or not isPositiveFinite(candidate.RevealDelaySeconds)
@@ -354,13 +399,30 @@ local function destroyScrapPulseTelegraph()
 	end
 end
 
-local function destroyAttemptModels()
-	destroyScrapPulseTelegraph()
-	nextScrapPulseAt = 0
+local function destroyCarryModel()
 	if carryModel then
 		carryModel:Destroy()
 		carryModel = nil
 	end
+end
+
+local function destroyDroppedModel()
+	if droppedModel then
+		droppedModel:Destroy()
+		droppedModel = nil
+	end
+end
+
+local function destroyAttemptModels()
+	destroyScrapPulseTelegraph()
+	nextScrapPulseAt = 0
+	destroyCarryModel()
+	destroyDroppedModel()
+	droppedPosition = nil
+	claimOpenAt = 0
+	dropTimeoutAt = 0
+	postClaimProtectionEndsAt = 0
+	lastDisruptorUserId = nil
 	if wardenModel then
 		wardenModel:Destroy()
 		wardenModel = nil
@@ -395,10 +457,19 @@ local function newDisplayPart(
 	return part
 end
 
-local function createCarry(player: Player, characterRoot: BasePart): Model
+local function createCarry(
+	player: Player,
+	characterRoot: BasePart,
+	attemptToken: number,
+	possessionToken: number,
+	candidate: Definition,
+	disruptEnabled: boolean
+): Model
 	local model = Instance.new("Model")
 	model.Name = "CarriedFurnacePod"
 	model:SetAttribute("CarrierUserId", player.UserId)
+	model:SetAttribute("RecoveryGeneration", attemptToken)
+	model:SetAttribute("PossessionId", possessionToken)
 
 	local root = Instance.new("Part")
 	root.Name = "RootPart"
@@ -448,6 +519,27 @@ local function createCarry(player: Player, characterRoot: BasePart): Model
 	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
 	highlight.Parent = model
 
+	local disruptPrompt = Instance.new("ProximityPrompt")
+	disruptPrompt.Name = "DisruptPrompt"
+	disruptPrompt.ActionText = "DISRUPT"
+	disruptPrompt.ObjectText = "FURNACE POD CARRIER"
+	disruptPrompt.HoldDuration = 0.2
+	disruptPrompt.MaxActivationDistance = candidate.DisruptRange
+	disruptPrompt.RequiresLineOfSight = true
+	disruptPrompt.ClickablePrompt = true
+	disruptPrompt.KeyboardKeyCode = Enum.KeyCode.E
+	disruptPrompt.GamepadKeyCode = Enum.KeyCode.ButtonX
+	disruptPrompt.Enabled = disruptEnabled
+	disruptPrompt:SetAttribute("ODDWORKSPromptKind", "FurnaceDisrupt")
+	disruptPrompt:SetAttribute("CarrierUserId", player.UserId)
+	disruptPrompt.Triggered:Connect(function(attacker: Player)
+		local handler = disruptPromptHandler
+		if handler then
+			handler(attacker, attemptToken, possessionToken)
+		end
+	end)
+	disruptPrompt.Parent = core
+
 	local characterWeld = Instance.new("Weld")
 	characterWeld.Name = "CharacterCarryWeld"
 	characterWeld.Part0 = characterRoot
@@ -456,6 +548,122 @@ local function createCarry(player: Player, characterRoot: BasePart): Model
 	characterWeld.C1 = CFrame.identity
 	characterWeld.Parent = root
 	model.Parent = characterRoot.Parent
+	return model
+end
+
+local function createDroppedPod(
+	position: Vector3,
+	attemptToken: number,
+	droppedPossessionToken: number,
+	candidate: Definition
+): Model
+	local folder = assert(runtimeFolder, "Furnace Pod chase runtime folder is unavailable.")
+	local model = Instance.new("Model")
+	model.Name = "DroppedContestedFurnacePod"
+	model:SetAttribute("RecoveryGeneration", attemptToken)
+	model:SetAttribute("DroppedFromPossessionId", droppedPossessionToken)
+	model:SetAttribute("Contested", true)
+
+	local rootCFrame = CFrame.new(position)
+	local shell = newDisplayPart(
+		model,
+		"PodShell",
+		rootCFrame,
+		CFrame.identity,
+		Vector3.new(2.8, 3.4, 2.6),
+		Color3.fromRGB(73, 76, 78),
+		Enum.Material.CorrodedMetal,
+		Enum.PartType.Ball
+	)
+	model.PrimaryPart = shell
+	local core = newDisplayPart(
+		model,
+		"ContestedCore",
+		rootCFrame,
+		CFrame.new(0, 0, -1.15),
+		Vector3.new(1.5, 1.95, 0.4),
+		Color3.fromRGB(255, 104, 31),
+		Enum.Material.Neon,
+		nil
+	)
+	newDisplayPart(model, "TopBand", rootCFrame, CFrame.new(0, 1.2, 0), Vector3.new(2.9, 0.4, 2.7), Color3.fromRGB(224, 164, 56), Enum.Material.Metal, nil)
+	newDisplayPart(model, "BottomBand", rootCFrame, CFrame.new(0, -1.2, 0), Vector3.new(2.9, 0.4, 2.7), Color3.fromRGB(224, 164, 56), Enum.Material.Metal, nil)
+	local claimRing = newDisplayPart(
+		model,
+		"ClaimRing",
+		rootCFrame,
+		CFrame.new(0, -1.65, 0) * CFrame.Angles(0, 0, math.rad(90)),
+		Vector3.new(0.12, candidate.ClaimRange * 1.15, candidate.ClaimRange * 1.15),
+		Color3.fromRGB(255, 132, 38),
+		Enum.Material.Neon,
+		Enum.PartType.Cylinder
+	)
+	claimRing.Transparency = 0.58
+
+	local light = Instance.new("PointLight")
+	light.Name = "ContestedLight"
+	light.Color = Color3.fromRGB(255, 105, 28)
+	light.Brightness = 2.5
+	light.Range = 16
+	light.Shadows = false
+	light.Parent = core
+	TweenService:Create(
+		light,
+		TweenInfo.new(0.45, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		{ Brightness = 5 }
+	):Play()
+
+	local label = Instance.new("BillboardGui")
+	label.Name = "ContestedLabel"
+	label.Adornee = core
+	label.AlwaysOnTop = false
+	label.MaxDistance = 70
+	label.Size = UDim2.fromOffset(180, 38)
+	label.StudsOffsetWorldSpace = Vector3.new(0, 2.6, 0)
+	label.Parent = core
+	local labelText = Instance.new("TextLabel")
+	labelText.Size = UDim2.fromScale(1, 1)
+	labelText.BackgroundColor3 = Color3.fromRGB(52, 31, 22)
+	labelText.BackgroundTransparency = 0.18
+	labelText.BorderSizePixel = 0
+	labelText.Font = Enum.Font.GothamBold
+	labelText.Text = "CONTESTED / UNCLAIMED"
+	labelText.TextColor3 = Color3.fromRGB(255, 188, 79)
+	labelText.TextSize = 14
+	labelText.Parent = label
+
+	local claimPrompt = Instance.new("ProximityPrompt")
+	claimPrompt.Name = "ClaimPrompt"
+	claimPrompt.ActionText = "CLAIM POD"
+	claimPrompt.ObjectText = "CONTESTED FURNACE POD"
+	claimPrompt.HoldDuration = 0
+	claimPrompt.MaxActivationDistance = candidate.ClaimRange
+	claimPrompt.RequiresLineOfSight = false
+	claimPrompt.ClickablePrompt = true
+	claimPrompt.KeyboardKeyCode = Enum.KeyCode.E
+	claimPrompt.GamepadKeyCode = Enum.KeyCode.ButtonX
+	claimPrompt.Enabled = false
+	claimPrompt:SetAttribute("ODDWORKSPromptKind", "FurnaceClaim")
+	claimPrompt.Triggered:Connect(function(claimant: Player)
+		local handler = claimPromptHandler
+		if handler then
+			handler(claimant, attemptToken, droppedPossessionToken)
+		end
+	end)
+	local claimAnchor = newDisplayPart(
+		model,
+		"ClaimAnchor",
+		rootCFrame,
+		CFrame.new(0, candidate.ClaimAnchorHeight, 0),
+		Vector3.new(0.4, 0.4, 0.4),
+		Color3.fromRGB(255, 255, 255),
+		Enum.Material.SmoothPlastic,
+		nil
+	)
+	claimAnchor.Transparency = 1
+	claimPrompt.Parent = claimAnchor
+
+	model.Parent = folder
 	return model
 end
 
@@ -558,15 +766,39 @@ local function isWardenRuntimePresent(): boolean
 		and model.PrimaryPart:IsDescendantOf(model)
 end
 
+local function setCarryDisruptEnabled(enabled: boolean)
+	local model = carryModel
+	local prompt = if model then model:FindFirstChild("DisruptPrompt", true) else nil
+	if prompt and prompt:IsA("ProximityPrompt") then
+		prompt.Enabled = enabled
+	end
+end
+
+local function setDroppedClaimEnabled(enabled: boolean)
+	local model = droppedModel
+	local prompt = if model then model:FindFirstChild("ClaimPrompt", true) else nil
+	if prompt and prompt:IsA("ProximityPrompt") then
+		prompt.Enabled = enabled
+	end
+end
+
 -- Carry and Warden models are disposable projections of an active server
 -- attempt. If either whole model disappears, rebuild it without touching chase
 -- ownership, rewards, or the attempt generation.
-local function ensureAttemptModels(player: Player, characterRoot: BasePart, chaseRuntime: ChaseRuntime): boolean
+local function ensureAttemptModels(
+	player: Player,
+	characterRoot: BasePart,
+	chaseRuntime: ChaseRuntime,
+	candidate: Definition,
+	attemptToken: number,
+	possessionToken: number
+): boolean
 	if not isCarryRuntimePresent(player) then
 		if carryModel then
 			carryModel:Destroy()
 		end
-		carryModel = createCarry(player, characterRoot)
+		local disruptEnabled = state == "CHASE_ACTIVE" and os.clock() >= postClaimProtectionEndsAt
+		carryModel = createCarry(player, characterRoot, attemptToken, possessionToken, candidate, disruptEnabled)
 	end
 
 	if not isWardenRuntimePresent() then
@@ -608,10 +840,14 @@ local function setWardenAlarm(bright: boolean)
 	end
 end
 
-local function runActivationTelegraph(player: Player, attemptToken: number)
+local function runActivationTelegraph(player: Player, attemptToken: number, possessionToken: number)
 	local bright = false
 	local nextAlarmToggle = 0
-	while generation == attemptToken and carrier == player and state == "ACTIVATING" do
+	while generation == attemptToken
+		and possessionId == possessionToken
+		and carrier == player
+		and state == "ACTIVATING"
+	do
 		local now = os.clock()
 		updateCarryMotion(player, now)
 		if now >= nextAlarmToggle then
@@ -713,7 +949,14 @@ local function createScrapPulseTelegraph(targetPosition: Vector3, candidate: Def
 	return model
 end
 
-local function applyScrapPulseSlow(player: Player, humanoid: Humanoid, attemptToken: number, attackId: number, candidate: Definition)
+local function applyScrapPulseSlow(
+	player: Player,
+	humanoid: Humanoid,
+	attemptToken: number,
+	possessionToken: number,
+	attackId: number,
+	candidate: Definition
+)
 	local activeOverride = movementOverride
 	if not activeOverride or activeOverride.Player ~= player or activeOverride.Humanoid ~= humanoid then
 		return
@@ -724,6 +967,7 @@ local function applyScrapPulseSlow(player: Player, humanoid: Humanoid, attemptTo
 	applyDerivedMovement(activeOverride)
 	task.delay(candidate.ScrapPulseSlowSeconds, function()
 		if generation ~= attemptToken
+			or possessionId ~= possessionToken
 			or carrier ~= player
 			or state ~= "CHASE_ACTIVE"
 			or pulseDebuffAttackId ~= attackId
@@ -741,9 +985,16 @@ local function applyScrapPulseSlow(player: Player, humanoid: Humanoid, attemptTo
 	end)
 end
 
-local function resolveScrapPulse(player: Player, attemptToken: number, attackId: number, candidate: Definition)
+local function resolveScrapPulse(
+	player: Player,
+	attemptToken: number,
+	possessionToken: number,
+	attackId: number,
+	candidate: Definition
+)
 	local pulse = activeScrapPulse
 	if generation ~= attemptToken
+		or possessionId ~= possessionToken
 		or carrier ~= player
 		or state ~= "CHASE_ACTIVE"
 		or not pulse
@@ -772,7 +1023,7 @@ local function resolveScrapPulse(player: Player, attemptToken: number, attackId:
 	local offset = root.Position - pulse.TargetPosition
 	local horizontalDistance = Vector2.new(offset.X, offset.Z).Magnitude
 	if horizontalDistance <= candidate.ScrapPulseRadius then
-		applyScrapPulseSlow(player, humanoid, attemptToken, attackId, candidate)
+		applyScrapPulseSlow(player, humanoid, attemptToken, possessionToken, attackId, candidate)
 		fireCarrier(player, { Kind = "PULSE_HIT" })
 	else
 		fireCarrier(player, { Kind = "PULSE_DODGED" })
@@ -782,11 +1033,13 @@ end
 local function beginPublicScrapPulseTelegraph(
 	player: Player,
 	attemptToken: number,
+	possessionToken: number,
 	attackId: number,
 	candidate: Definition
 )
 	local pulse = activeScrapPulse
 	if generation ~= attemptToken
+		or possessionId ~= possessionToken
 		or carrier ~= player
 		or state ~= "CHASE_ACTIVE"
 		or not pulse
@@ -799,7 +1052,7 @@ local function beginPublicScrapPulseTelegraph(
 	pulse.TelegraphModel = createScrapPulseTelegraph(pulse.TargetPosition, candidate, attackId)
 	setWardenPulseWindup(true)
 	task.delay(candidate.ScrapPulseTelegraphSeconds, function()
-		resolveScrapPulse(player, attemptToken, attackId, candidate)
+		resolveScrapPulse(player, attemptToken, possessionToken, attackId, candidate)
 	end)
 end
 
@@ -810,10 +1063,12 @@ local function tryStartScrapPulse(
 	wardenDistance: number,
 	now: number,
 	attemptToken: number,
+	possessionToken: number,
 	candidate: Definition
 )
 	if state ~= "CHASE_ACTIVE"
 		or generation ~= attemptToken
+		or possessionId ~= possessionToken
 		or carrier ~= player
 		or activeScrapPulse ~= nil
 		or now < nextScrapPulseAt
@@ -844,7 +1099,7 @@ local function tryStartScrapPulse(
 		})
 	end
 	task.delay(candidate.ScrapPulseForecastSeconds, function()
-		beginPublicScrapPulseTelegraph(player, attemptToken, attackId, candidate)
+		beginPublicScrapPulseTelegraph(player, attemptToken, possessionToken, attackId, candidate)
 	end)
 end
 
@@ -886,10 +1141,17 @@ local function scheduleReset(resetToken: number, delaySeconds: number)
 	end)
 end
 
-local function failAttempt(player: Player, attemptToken: number, shouldReturnToWorkshop: boolean, notifyClient: boolean)
+local function failAttempt(
+	player: Player,
+	attemptToken: number,
+	possessionToken: number,
+	shouldReturnToWorkshop: boolean,
+	notifyClient: boolean
+)
 	if generation ~= attemptToken
+		or possessionId ~= possessionToken
 		or carrier ~= player
-		or (state ~= "ACTIVATING" and state ~= "CHASE_ACTIVE" and state ~= "SECURED")
+		or (state ~= "ACTIVATING" and state ~= "RECLAIMING" and state ~= "CHASE_ACTIVE" and state ~= "SECURED")
 	then
 		return
 	end
@@ -915,11 +1177,11 @@ local function failAttempt(player: Player, attemptToken: number, shouldReturnToW
 	end
 end
 
-local function cancelAttempt(player: Player, attemptToken: number, reason: string)
-	if generation ~= attemptToken or carrier ~= player then
+local function cancelAttempt(player: Player, attemptToken: number, possessionToken: number, reason: string)
+	if generation ~= attemptToken or possessionId ~= possessionToken or carrier ~= player then
 		return
 	end
-	failAttempt(player, attemptToken, false, false)
+	failAttempt(player, attemptToken, possessionToken, false, false)
 	fireCarrier(player, { Kind = "CANCELLED" })
 	warn(string.format("[ODDWORKS][FurnacePodChase] Cancelled %s attempt: %s.", player.Name, reason))
 end
@@ -951,8 +1213,12 @@ local function moveWardenToward(targetPosition: Vector3, speed: number, deltaTim
 	return distance
 end
 
-local function completeSecure(player: Player, attemptToken: number, candidate: Definition)
-	if generation ~= attemptToken or carrier ~= player or state ~= "CHASE_ACTIVE" then
+local function completeSecure(player: Player, attemptToken: number, possessionToken: number, candidate: Definition)
+	if generation ~= attemptToken
+		or possessionId ~= possessionToken
+		or carrier ~= player
+		or state ~= "CHASE_ACTIVE"
+	then
 		return
 	end
 
@@ -964,6 +1230,7 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 
 	task.delay(candidate.RevealDelaySeconds, function()
 		if generation ~= attemptToken
+			or possessionId ~= possessionToken
 			or state ~= "SECURED"
 			or carrier ~= player
 			or player.Parent ~= Players
@@ -973,18 +1240,18 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 			return
 		end
 		if not WorkshopService.GetAssignedPlot(player) then
-			cancelAttempt(player, attemptToken, "WORKSHOP_UNAVAILABLE")
+			cancelAttempt(player, attemptToken, possessionToken, "WORKSHOP_UNAVAILABLE")
 			return
 		end
 		local _, humanoid = getCharacterRootAndHumanoid(player)
 		if not humanoid then
-			failAttempt(player, attemptToken, false, false)
+			failAttempt(player, attemptToken, possessionToken, false, false)
 			return
 		end
 
 		local preRewardState = PlayerStateService.GetSnapshot(player)
 		if not preRewardState then
-			cancelAttempt(player, attemptToken, "REWARD_FAILED")
+			cancelAttempt(player, attemptToken, possessionToken, "REWARD_FAILED")
 			return
 		end
 		local firstDiscovery = (preRewardState.OwnedOddlings.Kilnback or 0) == 0
@@ -994,12 +1261,12 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 			or not PlayerStateService.CanAddOwnedOddling(player, "Kilnback", 1)
 		then
 			warn(string.format("[ODDWORKS][FurnacePodChase] Kilnback reward preflight failed for %s.", player.Name))
-			cancelAttempt(player, attemptToken, "REWARD_FAILED")
+			cancelAttempt(player, attemptToken, possessionToken, "REWARD_FAILED")
 			return
 		end
 		if not PlayerStateService.AddOwnedOddling(player, "Kilnback", 1) then
 			warn(string.format("[ODDWORKS][FurnacePodChase] Kilnback ownership commit failed for %s.", player.Name))
-			cancelAttempt(player, attemptToken, "REWARD_FAILED")
+			cancelAttempt(player, attemptToken, possessionToken, "REWARD_FAILED")
 			return
 		end
 
@@ -1029,17 +1296,21 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 	end)
 end
 
-local function runChase(player: Player, attemptToken: number, candidate: Definition)
+local function runChase(player: Player, attemptToken: number, possessionToken: number, candidate: Definition)
 	local previousClock = os.clock()
-	while generation == attemptToken and carrier == player and state == "CHASE_ACTIVE" do
+	while generation == attemptToken
+		and possessionId == possessionToken
+		and carrier == player
+		and state == "CHASE_ACTIVE"
+	do
 		local root, humanoid = getCharacterRootAndHumanoid(player)
 		if not root or not humanoid then
-			failAttempt(player, attemptToken, false, player.Parent == Players)
+			failAttempt(player, attemptToken, possessionToken, false, player.Parent == Players)
 			return
 		end
 		local chaseRuntime = runtime
-		if not chaseRuntime or not ensureAttemptModels(player, root, chaseRuntime) then
-			cancelAttempt(player, attemptToken, "RUNTIME_UNAVAILABLE")
+		if not chaseRuntime or not ensureAttemptModels(player, root, chaseRuntime, candidate, attemptToken, possessionToken) then
+			cancelAttempt(player, attemptToken, possessionToken, "RUNTIME_UNAVAILABLE")
 			return
 		end
 		if activeScrapPulse and activeScrapPulse.TelegraphModel ~= nil then
@@ -1048,11 +1319,11 @@ local function runChase(player: Player, attemptToken: number, candidate: Definit
 
 		local secureZone = getAssignedSecureZone(player, candidate)
 		if not secureZone then
-			cancelAttempt(player, attemptToken, "WORKSHOP_UNAVAILABLE")
+			cancelAttempt(player, attemptToken, possessionToken, "WORKSHOP_UNAVAILABLE")
 			return
 		end
 		if isInsideVolume(root.Position, secureZone) then
-			completeSecure(player, attemptToken, candidate)
+			completeSecure(player, attemptToken, possessionToken, candidate)
 			return
 		end
 
@@ -1068,12 +1339,435 @@ local function runChase(player: Player, attemptToken: number, candidate: Definit
 		local distance = moveWardenToward(root.Position, candidate.StageSpeeds[stage], math.min(now - previousClock, 0.25))
 		previousClock = now
 		if distance <= candidate.CatchRadius then
-			failAttempt(player, attemptToken, true, true)
+			failAttempt(player, attemptToken, possessionToken, true, true)
 			return
 		end
-		tryStartScrapPulse(player, root, humanoid, distance, now, attemptToken, candidate)
+		tryStartScrapPulse(player, root, humanoid, distance, now, attemptToken, possessionToken, candidate)
 		task.wait(candidate.PollSeconds)
 	end
+end
+
+local function createContestPulse(position: Vector3, name: string, color: Color3)
+	local folder = runtimeFolder
+	if not folder then
+		return
+	end
+	local model = Instance.new("Model")
+	model.Name = name
+	local pulse = newDisplayPart(
+		model,
+		"Pulse",
+		CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90)),
+		CFrame.identity,
+		Vector3.new(0.12, 3, 3),
+		color,
+		Enum.Material.Neon,
+		Enum.PartType.Cylinder
+	)
+	pulse.Transparency = 0.25
+	model.Parent = folder
+	TweenService:Create(
+		pulse,
+		TweenInfo.new(0.32, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Size = Vector3.new(0.12, 10, 10), Transparency = 1 }
+	):Play()
+	Debris:AddItem(model, 0.4)
+end
+
+local function createContestStatus(position: Vector3, text: string, color: Color3)
+	local folder = runtimeFolder
+	if not folder then
+		return
+	end
+	local anchor = Instance.new("Part")
+	anchor.Name = "FurnaceContestStatus"
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanQuery = false
+	anchor.CanTouch = false
+	anchor.Size = Vector3.new(0.2, 0.2, 0.2)
+	anchor.Transparency = 1
+	anchor.Position = position + Vector3.new(0, 3.5, 0)
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "StatusLabel"
+	billboard.AlwaysOnTop = false
+	billboard.MaxDistance = 75
+	billboard.Size = UDim2.fromOffset(170, 36)
+	billboard.Parent = anchor
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundColor3 = Color3.fromRGB(48, 27, 22)
+	label.BackgroundTransparency = 0.2
+	label.BorderSizePixel = 0
+	label.Font = Enum.Font.GothamBold
+	label.Text = text
+	label.TextColor3 = color
+	label.TextSize = 14
+	label.Parent = billboard
+
+	anchor.Parent = folder
+	Debris:AddItem(anchor, 1.2)
+end
+
+local function projectDropCandidate(candidatePosition: Vector3, excluded: { Instance }): Vector3?
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = excluded
+	local result = Workspace:Raycast(
+		candidatePosition + Vector3.new(0, 8, 0),
+		Vector3.new(0, -32, 0),
+		params
+	)
+	if result and result.Normal.Y >= 0.55 then
+		return result.Position + Vector3.new(0, 1.75, 0)
+	end
+	return nil
+end
+
+local function getGroundedDropPosition(
+	targetPlayer: Player,
+	carrierRoot: BasePart,
+	attacker: Player,
+	attackerRoot: BasePart,
+	candidate: Definition
+): Vector3
+	local excluded: { Instance } = {}
+	if targetPlayer.Character then
+		table.insert(excluded, targetPlayer.Character)
+	end
+	if attacker.Character then
+		table.insert(excluded, attacker.Character)
+	end
+	if carryModel then
+		table.insert(excluded, carryModel :: Model)
+	end
+	if wardenModel then
+		table.insert(excluded, wardenModel :: Model)
+	end
+
+	local interactionOffset = attackerRoot.Position - carrierRoot.Position
+	local flatAxis = Vector3.new(interactionOffset.X, 0, interactionOffset.Z)
+	if flatAxis.Magnitude < 0.05 then
+		local look = carrierRoot.CFrame.LookVector
+		flatAxis = Vector3.new(look.X, 0, look.Z)
+	end
+	if flatAxis.Magnitude < 0.05 then
+		flatAxis = Vector3.new(0, 0, -1)
+	end
+
+	local axis = flatAxis.Unit
+	local perpendicular = Vector3.new(-axis.Z, 0, axis.X)
+	local contestantDistance = math.min(flatAxis.Magnitude, candidate.DisruptRange)
+	local halfDistance = contestantDistance * 0.5
+	local neutralSideDistance = math.sqrt(math.max(0, candidate.DropPlacementDistance ^ 2 - halfDistance ^ 2))
+	local midpoint = carrierRoot.Position + axis * halfDistance
+	local candidates = {
+		midpoint + perpendicular * neutralSideDistance,
+		midpoint - perpendicular * neutralSideDistance,
+		carrierRoot.Position + perpendicular * candidate.DropPlacementDistance,
+		carrierRoot.Position - perpendicular * candidate.DropPlacementDistance,
+	}
+	for _, candidatePosition in ipairs(candidates) do
+		local grounded = projectDropCandidate(candidatePosition, excluded)
+		if grounded then
+			return grounded
+		end
+	end
+
+	local fallback = candidates[1]
+	return Vector3.new(fallback.X, carrierRoot.Position.Y - 1.1, fallback.Z)
+end
+
+local function hasDisruptLineOfSight(
+	attacker: Player,
+	attackerRoot: BasePart,
+	targetPlayer: Player,
+	targetRoot: BasePart
+): boolean
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local excluded: { Instance } = {}
+	if attacker.Character then
+		table.insert(excluded, attacker.Character)
+	end
+	if targetPlayer.Character then
+		table.insert(excluded, targetPlayer.Character)
+	end
+	if carryModel then
+		table.insert(excluded, carryModel :: Model)
+	end
+	params.FilterDescendantsInstances = excluded
+	return Workspace:Raycast(attackerRoot.Position, targetRoot.Position - attackerRoot.Position, params) == nil
+end
+
+local function hasClaimLineOfSight(claimant: Player, claimantRoot: BasePart, targetPosition: Vector3): boolean
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local excluded: { Instance } = {}
+	for _, player in Players:GetPlayers() do
+		if player.Character then
+			table.insert(excluded, player.Character)
+		end
+	end
+	if droppedModel then
+		table.insert(excluded, droppedModel :: Model)
+	end
+	if wardenModel then
+		table.insert(excluded, wardenModel :: Model)
+	end
+	params.FilterDescendantsInstances = excluded
+	return Workspace:Raycast(claimantRoot.Position, targetPosition - claimantRoot.Position, params) == nil
+end
+
+local function resetDroppedAttempt(attemptToken: number, droppedPossessionToken: number, reason: string)
+	if generation ~= attemptToken
+		or possessionId ~= droppedPossessionToken
+		or state ~= "DROPPED_CONTESTED"
+		or carrier ~= nil
+	then
+		return
+	end
+
+	generation += 1
+	local resetToken = generation
+	state = "RESETTING"
+	setAvailabilityText("RESETTING")
+	disconnectActiveDeath()
+	destroyAttemptModels()
+	local candidate = definition
+	if candidate then
+		scheduleReset(resetToken, candidate.ResetSeconds)
+	end
+	warn(string.format("[ODDWORKS][FurnacePodChase] Contested attempt reset: %s.", reason))
+end
+
+local function runDroppedContest(attemptToken: number, droppedPossessionToken: number, candidate: Definition)
+	local previousClock = os.clock()
+	while generation == attemptToken
+		and possessionId == droppedPossessionToken
+		and state == "DROPPED_CONTESTED"
+		and carrier == nil
+	do
+		local targetPosition = droppedPosition
+		local chaseRuntime = runtime
+		if not targetPosition or not chaseRuntime then
+			resetDroppedAttempt(attemptToken, droppedPossessionToken, "DROPPED_RUNTIME_UNAVAILABLE")
+			return
+		end
+		if not isWardenRuntimePresent() then
+			if wardenModel then
+				wardenModel:Destroy()
+			end
+			local replacement = createWarden(chaseRuntime.WardenSpawnMarker)
+			replacement:PivotTo(wardenCFrame or chaseRuntime.WardenSpawnMarker.CFrame)
+			wardenModel = replacement
+		end
+
+		local now = os.clock()
+		local stage = getStage(now - chaseStartedAt, candidate)
+		currentStage = stage
+		local distance = moveWardenToward(
+			targetPosition,
+			candidate.StageSpeeds[stage],
+			math.min(now - previousClock, 0.25)
+		)
+		previousClock = now
+		if now >= claimOpenAt and distance <= candidate.WardenReclaimRadius then
+			createContestPulse(targetPosition, "FurnaceWardenReclaimImpact", Color3.fromRGB(255, 83, 37))
+			createContestStatus(targetPosition, "POD RECLAIMED", Color3.fromRGB(255, 151, 67))
+			resetDroppedAttempt(attemptToken, droppedPossessionToken, "WARDEN_RECLAIM")
+			return
+		end
+		task.wait(candidate.PollSeconds)
+	end
+end
+
+disruptPromptHandler = function(attacker: Player, attemptToken: number, possessionToken: number)
+	local candidate = definition
+	local targetPlayer = carrier
+	if not candidate
+		or generation ~= attemptToken
+		or possessionId ~= possessionToken
+		or state ~= "CHASE_ACTIVE"
+		or not targetPlayer
+		or attacker == targetPlayer
+		or attacker.Parent ~= Players
+		or targetPlayer.Parent ~= Players
+		or RecoveryCarrierRegistry.GetActiveActivity(attacker) ~= nil
+		or RecoveryCarrierRegistry.GetActiveActivity(targetPlayer) ~= RECOVERY_ACTIVITY_ID
+	then
+		return
+	end
+
+	local now = os.clock()
+	local lastDisrupt = lastDisruptTimes[attacker]
+	if now < postClaimProtectionEndsAt
+		or (lastDisrupt and now - lastDisrupt < candidate.DisruptCooldownSeconds)
+	then
+		return
+	end
+
+	local attackerRoot, attackerHumanoid = getCharacterRootAndHumanoid(attacker)
+	local targetRoot, targetHumanoid = getCharacterRootAndHumanoid(targetPlayer)
+	if not attackerRoot
+		or not attackerHumanoid
+		or not targetRoot
+		or not targetHumanoid
+		or (attackerRoot.Position - targetRoot.Position).Magnitude > candidate.DisruptRange
+		or not PlayerStateService.HasState(attacker)
+		or not ModularPrototypeStateService.HasState(attacker)
+	then
+		return
+	end
+	local secureZone = getAssignedSecureZone(targetPlayer, candidate)
+	if not secureZone
+		or isInsideVolume(targetRoot.Position, secureZone)
+		or not hasDisruptLineOfSight(attacker, attackerRoot, targetPlayer, targetRoot)
+	then
+		return
+	end
+
+	local dropPosition = getGroundedDropPosition(targetPlayer, targetRoot, attacker, attackerRoot, candidate)
+	lastDisruptTimes[attacker] = now
+	lastDisruptorUserId = attacker.UserId
+	destroyScrapPulseTelegraph()
+	setWardenPulseWindup(false)
+	restoreChaseMovement(targetPlayer)
+	disconnectActiveDeath()
+	destroyCarryModel()
+	RecoveryCarrierRegistry.Release(targetPlayer, RECOVERY_ACTIVITY_ID)
+	carrier = nil
+	state = "DROPPED_CONTESTED"
+	droppedPosition = dropPosition
+	claimOpenAt = now + candidate.ClaimGraceSeconds
+	dropTimeoutAt = now + candidate.DroppedTimeoutSeconds
+	postClaimProtectionEndsAt = 0
+	droppedModel = createDroppedPod(dropPosition, attemptToken, possessionToken, candidate)
+	setAvailabilityText("CONTESTED - CLAIM POD")
+	setWardenAlarm(true)
+	createContestPulse(dropPosition, "FurnaceDisruptionImpact", Color3.fromRGB(255, 84, 43))
+	fireCarrier(targetPlayer, { Kind = "POD_DROPPED" })
+	fireCarrier(attacker, { Kind = "DISRUPTION_SUCCESS" })
+
+	task.delay(candidate.ClaimGraceSeconds, function()
+		if generation == attemptToken
+			and possessionId == possessionToken
+			and state == "DROPPED_CONTESTED"
+			and carrier == nil
+			and os.clock() >= claimOpenAt
+		then
+			setDroppedClaimEnabled(true)
+		end
+	end)
+	task.delay(candidate.DroppedTimeoutSeconds, function()
+		resetDroppedAttempt(attemptToken, possessionToken, "DROP_TIMEOUT")
+	end)
+	task.spawn(runDroppedContest, attemptToken, possessionToken, candidate)
+end
+
+claimPromptHandler = function(claimant: Player, attemptToken: number, droppedPossessionToken: number)
+	local candidate = definition
+	if not candidate
+		or generation ~= attemptToken
+		or possessionId ~= droppedPossessionToken
+		or state ~= "DROPPED_CONTESTED"
+		or carrier ~= nil
+		or os.clock() < claimOpenAt
+		or claimant.Parent ~= Players
+		or RecoveryCarrierRegistry.GetActiveActivity(claimant) ~= nil
+		or not PlayerStateService.HasState(claimant)
+		or not ModularPrototypeStateService.HasState(claimant)
+		or not WorkshopService.GetAssignedPlot(claimant)
+	then
+		return
+	end
+	local claimantRoot, humanoid = getCharacterRootAndHumanoid(claimant)
+	local authoritativeDropPosition = droppedPosition
+	if not claimantRoot
+		or not humanoid
+		or not authoritativeDropPosition
+		or (claimantRoot.Position - authoritativeDropPosition).Magnitude > candidate.ClaimRange
+		or not hasClaimLineOfSight(claimant, claimantRoot, authoritativeDropPosition)
+	then
+		return
+	end
+	local secureZone = getAssignedSecureZone(claimant, candidate)
+	if not secureZone then
+		return
+	end
+
+	-- TryAcquire and the shared-state commit contain no yield. Once the registry
+	-- accepts this claimant, every later handler observes a non-dropped phase.
+	if not RecoveryCarrierRegistry.TryAcquire(claimant, RECOVERY_ACTIVITY_ID) then
+		return
+	end
+	local now = os.clock()
+	local newPossessionToken = droppedPossessionToken + 1
+	carrier = claimant
+	possessionId = newPossessionToken
+	state = "RECLAIMING"
+	droppedPosition = nil
+	claimOpenAt = 0
+	dropTimeoutAt = 0
+	postClaimProtectionEndsAt = now + candidate.PostClaimProtectionSeconds
+	destroyDroppedModel()
+
+	carryModel = createCarry(claimant, claimantRoot, attemptToken, newPossessionToken, candidate, false)
+	local springLegsActive = applyChaseMovement(claimant, humanoid, candidate)
+	activeDeathConnection = humanoid.Died:Connect(function()
+		failAttempt(claimant, attemptToken, newPossessionToken, false, claimant.Parent == Players)
+	end)
+	nextScrapPulseAt = now + candidate.ReclaimPulseDelaySeconds
+	setAvailabilityText("IN RECOVERY")
+	createContestPulse(authoritativeDropPosition, "FurnaceClaimImpact", Color3.fromRGB(255, 187, 67))
+	fireCarrier(claimant, {
+		Kind = "POD_CLAIMED",
+		ReclaimHeadStartSeconds = candidate.ReclaimHeadStartSeconds,
+		DestinationPosition = secureZone.Position,
+		SpringLegsActive = springLegsActive,
+	})
+
+	task.delay(candidate.PostClaimProtectionSeconds, function()
+		if generation == attemptToken
+			and possessionId == newPossessionToken
+			and carrier == claimant
+			and state == "CHASE_ACTIVE"
+		then
+			setCarryDisruptEnabled(true)
+		end
+	end)
+	task.delay(candidate.ReclaimHeadStartSeconds, function()
+		if generation ~= attemptToken
+			or possessionId ~= newPossessionToken
+			or carrier ~= claimant
+			or state ~= "RECLAIMING"
+		then
+			return
+		end
+		local activeRoot, activeHumanoid = getCharacterRootAndHumanoid(claimant)
+		local chaseRuntime = runtime
+		if not activeRoot
+			or not activeHumanoid
+			or not chaseRuntime
+			or not PlayerStateService.HasState(claimant)
+			or not ModularPrototypeStateService.HasState(claimant)
+			or not getAssignedSecureZone(claimant, candidate)
+		then
+			failAttempt(claimant, attemptToken, newPossessionToken, false, claimant.Parent == Players)
+			return
+		end
+		if not ensureAttemptModels(claimant, activeRoot, chaseRuntime, candidate, attemptToken, newPossessionToken) then
+			cancelAttempt(claimant, attemptToken, newPossessionToken, "RUNTIME_UNAVAILABLE")
+			return
+		end
+		verifyChaseMovement(claimant, activeHumanoid)
+		currentStage = getStage(os.clock() - chaseStartedAt, candidate)
+		state = "CHASE_ACTIVE"
+		setWardenAlarm(true)
+		fireCarrier(claimant, { Kind = "CHASE_STARTED", Stage = currentStage })
+		task.spawn(runChase, claimant, attemptToken, newPossessionToken, candidate)
+	end)
 end
 
 local function passesAttemptThrottle(player: Player, candidate: Definition): boolean
@@ -1140,18 +1834,20 @@ local function beginAttempt(
 	end
 	generation += 1
 	local attemptToken = generation
+	possessionId = 1
+	local possessionToken = possessionId
 	state = "STOLEN"
 	carrier = player
 	setTargetAvailable(false)
 	setAvailabilityText("IN RECOVERY")
 	destroyAttemptModels()
 
-	carryModel = createCarry(player, root)
+	carryModel = createCarry(player, root, attemptToken, possessionToken, candidate, false)
 	wardenModel = createWarden(chaseRuntime.WardenSpawnMarker)
 	wardenCFrame = chaseRuntime.WardenSpawnMarker.CFrame
 	local springLegsActive = applyChaseMovement(player, humanoid, candidate)
 	activeDeathConnection = humanoid.Died:Connect(function()
-		failAttempt(player, attemptToken, false, player.Parent == Players)
+		failAttempt(player, attemptToken, possessionToken, false, player.Parent == Players)
 	end)
 	state = "ACTIVATING"
 	fireCarrier(player, {
@@ -1161,9 +1857,13 @@ local function beginAttempt(
 		SpringLegsActive = springLegsActive,
 	})
 	print(string.format("[ODDWORKS][FurnacePodChase] %s stole the Furnace Pod; Warden activating.", player.Name))
-	task.spawn(runActivationTelegraph, player, attemptToken)
+	task.spawn(runActivationTelegraph, player, attemptToken, possessionToken)
 	task.delay(candidate.HeadStartSeconds, function()
-		if generation ~= attemptToken or carrier ~= player or state ~= "ACTIVATING" then
+		if generation ~= attemptToken
+			or possessionId ~= possessionToken
+			or carrier ~= player
+			or state ~= "ACTIVATING"
+		then
 			return
 		end
 		local activeRoot, activeHumanoid = getCharacterRootAndHumanoid(player)
@@ -1173,16 +1873,16 @@ local function beginAttempt(
 			or not PlayerStateService.HasState(player)
 			or not ModularPrototypeStateService.HasState(player)
 		then
-			failAttempt(player, attemptToken, false, player.Parent == Players)
+			failAttempt(player, attemptToken, possessionToken, false, player.Parent == Players)
 			return
 		end
 		local currentSecureZone = getAssignedSecureZone(player, candidate)
 		if not currentSecureZone then
-			cancelAttempt(player, attemptToken, "WORKSHOP_UNAVAILABLE")
+			cancelAttempt(player, attemptToken, possessionToken, "WORKSHOP_UNAVAILABLE")
 			return
 		end
-		if not ensureAttemptModels(player, activeRoot, chaseRuntime) then
-			cancelAttempt(player, attemptToken, "RUNTIME_UNAVAILABLE")
+		if not ensureAttemptModels(player, activeRoot, chaseRuntime, candidate, attemptToken, possessionToken) then
+			cancelAttempt(player, attemptToken, possessionToken, "RUNTIME_UNAVAILABLE")
 			return
 		end
 		verifyChaseMovement(player, activeHumanoid)
@@ -1191,9 +1891,10 @@ local function beginAttempt(
 		nextScrapPulseAt = chaseStartedAt + candidate.ScrapPulseCooldownSeconds
 		currentStage = 1
 		state = "CHASE_ACTIVE"
+		setCarryDisruptEnabled(true)
 		fireCarrier(player, { Kind = "CHASE_STARTED", Stage = 1 })
 		print(string.format("[ODDWORKS][FurnacePodChase] Scrap Warden chase active for %s.", player.Name))
-		task.spawn(runChase, player, attemptToken, candidate)
+		task.spawn(runChase, player, attemptToken, possessionToken, candidate)
 	end)
 end
 
@@ -1253,9 +1954,10 @@ local function clearPlayer(player: Player)
 	pendingConfirmations[player] = nil
 	lastAttemptTimes[player] = nil
 	lastConfirmationTimes[player] = nil
+	lastDisruptTimes[player] = nil
 	if carrier == player then
 		local shouldNotifyClient = player.Parent == Players
-		failAttempt(player, generation, false, false)
+		failAttempt(player, generation, possessionId, false, false)
 		if shouldNotifyClient then
 			fireCarrier(player, { Kind = "CANCELLED" })
 		end
@@ -1267,7 +1969,7 @@ end
 
 local function handleModularStateChanged(player: Player)
 	if carrier ~= player
-		or (state ~= "ACTIVATING" and state ~= "CHASE_ACTIVE")
+		or (state ~= "ACTIVATING" and state ~= "RECLAIMING" and state ~= "CHASE_ACTIVE")
 	then
 		return
 	end
@@ -1457,7 +2159,7 @@ end
 function FurnacePodChaseService.GetDiagnosticSnapshot(player: Player): DiagnosticSnapshot
 	local candidate = definition or FurnacePodChaseConfig.GetDefinition()
 	local isCarrier = carrier == player
-	local activePhase = state == "ACTIVATING" or state == "CHASE_ACTIVE"
+	local activePhase = state == "ACTIVATING" or state == "RECLAIMING" or state == "CHASE_ACTIVE"
 	local activeMovement = movementOverride
 	local playerMovement = if activeMovement and activeMovement.Player == player then activeMovement else nil
 	local _, humanoid = getCharacterRootAndHumanoid(player)
@@ -1468,6 +2170,12 @@ function FurnacePodChaseService.GetDiagnosticSnapshot(player: Player): Diagnosti
 	local now = os.clock()
 	local pulse = if isCarrier then activeScrapPulse else nil
 	local pulseDebuffActive = isCarrier and pulseDebuffAttackId ~= nil and pulseDebuffExpiresAt > now
+	local wardenDistanceToDroppedPod: number? = nil
+	if state == "DROPPED_CONTESTED" and droppedPosition and wardenModel and wardenModel.PrimaryPart then
+		local wardenPosition = wardenModel:GetPivot().Position
+		local offset = Vector3.new(droppedPosition.X - wardenPosition.X, 0, droppedPosition.Z - wardenPosition.Z)
+		wardenDistanceToDroppedPod = offset.Magnitude
+	end
 
 	local phase = state :: string
 	if state == "SECURED" and carrier == nil then
@@ -1491,6 +2199,21 @@ function FurnacePodChaseService.GetDiagnosticSnapshot(player: Player): Diagnosti
 		ExpectedSpringLegsWalkSpeed = if playerMovement and springLegsEligibleForAttempt then playerMovement.ChaseWalkSpeed else nil,
 		ConfiguredSpringLegsMultiplier = candidate.SpringLegsSpeedMultiplier,
 		ExpectedCurrentWalkSpeed = if playerMovement then playerMovement.AppliedWalkSpeed else nil,
+		PossessionId = possessionId,
+		CarrierUserId = if carrier then carrier.UserId else nil,
+		DroppedPosition = droppedPosition,
+		DroppedInteractionPosition = if droppedPosition then droppedPosition + Vector3.new(0, candidate.ClaimAnchorHeight, 0) else nil,
+		ClaimOpenRemaining = if state == "DROPPED_CONTESTED" then math.max(0, claimOpenAt - now) else 0,
+		DropTimeoutRemaining = if state == "DROPPED_CONTESTED" then math.max(0, dropTimeoutAt - now) else 0,
+		WardenDistanceToDroppedPod = wardenDistanceToDroppedPod,
+		WardenReclaimRadius = candidate.WardenReclaimRadius,
+		WardenReclaimEligible = state == "DROPPED_CONTESTED" and now >= claimOpenAt,
+		LastDisruptorUserId = lastDisruptorUserId,
+		DisruptCooldownRemaining = math.max(
+			0,
+			((lastDisruptTimes[player] or -candidate.DisruptCooldownSeconds) + candidate.DisruptCooldownSeconds) - now
+		),
+		PostClaimProtectionRemaining = math.max(0, postClaimProtectionEndsAt - now),
 		SignalScannerInstalled = ConstructCapabilityResolver.HasScrapPulseForecastCapability(player),
 		PulseForecastCapability = ConstructCapabilityResolver.HasScrapPulseForecastCapability(player),
 		ConfiguredScrapPulseForecastSeconds = candidate.ScrapPulseForecastSeconds,

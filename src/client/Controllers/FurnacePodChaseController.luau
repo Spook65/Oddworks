@@ -1,6 +1,7 @@
 --!strict
 
 local Players = game:GetService("Players")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -652,6 +653,25 @@ local function readPayload(payload: any): (string?, number?, string?, number?, V
 			end
 		end
 		return kind, nil, nil, payload.HeadStartSeconds, payload.DestinationPosition, payload.SpringLegsActive, nil, nil
+	elseif kind == "POD_CLAIMED" then
+		if typeof(payload.ReclaimHeadStartSeconds) ~= "number"
+			or payload.ReclaimHeadStartSeconds <= 0
+			or payload.ReclaimHeadStartSeconds > 2
+			or not isFiniteVector3(payload.DestinationPosition)
+			or typeof(payload.SpringLegsActive) ~= "boolean"
+		then
+			return nil, nil, nil, nil, nil, nil, nil, nil
+		end
+		for key in pairs(payload) do
+			if key ~= "Kind"
+				and key ~= "ReclaimHeadStartSeconds"
+				and key ~= "DestinationPosition"
+				and key ~= "SpringLegsActive"
+			then
+				return nil, nil, nil, nil, nil, nil, nil, nil
+			end
+		end
+		return kind, nil, nil, payload.ReclaimHeadStartSeconds, payload.DestinationPosition, payload.SpringLegsActive, nil, nil
 	elseif kind == "CHASE_STARTED" or kind == "STAGE" then
 		if typeof(payload.Stage) ~= "number" or payload.Stage % 1 ~= 0 or payload.Stage < 1 or payload.Stage > 3 then
 			return nil, nil, nil, nil, nil, nil, nil, nil
@@ -695,6 +715,7 @@ local function readPayload(payload: any): (string?, number?, string?, number?, V
 		end
 		return kind, nil, payload.SignatureId, nil, nil, nil, payload.FirstDiscovery, nil
 	elseif kind == "CAUGHT" or kind == "SECURED" or kind == "CANCELLED"
+		or kind == "POD_DROPPED" or kind == "DISRUPTION_SUCCESS"
 		or kind == "PULSE_HIT" or kind == "PULSE_DODGED"
 	then
 		for key in pairs(payload) do
@@ -717,6 +738,13 @@ function FurnacePodChaseController.Start()
 	local network = requireChildOfClass(ReplicatedStorage, "ODDWORKSNetwork", "Folder")
 	local stateRemote = requireChildOfClass(network, "FurnacePodChaseState", "RemoteEvent") :: RemoteEvent
 	confirmationRemote = requireChildOfClass(network, "FurnacePodStealConfirm", "RemoteEvent") :: RemoteEvent
+	ProximityPromptService.PromptShown:Connect(function(prompt: ProximityPrompt)
+		if prompt:GetAttribute("ODDWORKSPromptKind") == "FurnaceDisrupt"
+			and prompt:GetAttribute("CarrierUserId") == Players.LocalPlayer.UserId
+		then
+			prompt.Enabled = false
+		end
+	end)
 	Players.LocalPlayer.CharacterRemoving:Connect(function()
 		clearChasePresentation()
 	end)
@@ -747,6 +775,20 @@ function FurnacePodChaseController.Start()
 			else
 				hideSpringLegsActive()
 			end
+		elseif kind == "POD_CLAIMED" then
+			clearPulseForecast()
+			showObjectiveCue(destinationPosition :: Vector3)
+			showMessage(
+				string.format("POD CLAIMED\nWARDEN REACQUIRING  |  %.2fs GRACE", headStartSeconds :: number),
+				Color3.fromRGB(255, 193, 76),
+				0,
+				true
+			)
+			if springLegsActive then
+				showSpringLegsActive()
+			else
+				hideSpringLegsActive()
+			end
 		elseif kind == "CHASE_STARTED" or kind == "STAGE" then
 			if kind == "CHASE_STARTED" then
 				hideSpringLegsActive()
@@ -767,6 +809,11 @@ function FurnacePodChaseController.Start()
 			)
 		elseif kind == "PULSE_FORECAST" then
 			showPulseForecast(attackId :: number, destinationPosition :: Vector3, headStartSeconds :: number)
+		elseif kind == "POD_DROPPED" then
+			clearChasePresentation()
+			showMessage("POD DROPPED\nRACE TO RECLAIM", Color3.fromRGB(255, 139, 59), 1.6, false)
+		elseif kind == "DISRUPTION_SUCCESS" then
+			showPulseFeedback("DISRUPTION SUCCESSFUL\nPOD IS CONTESTED", Color3.fromRGB(255, 190, 82), 1.2)
 		elseif kind == "CAUGHT" then
 			hideSpringLegsActive()
 			clearPulseForecast()
