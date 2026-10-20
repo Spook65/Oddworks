@@ -716,6 +716,7 @@ local function readPayload(payload: any): (string?, number?, string?, number?, V
 		return kind, nil, payload.SignatureId, nil, nil, nil, payload.FirstDiscovery, nil
 	elseif kind == "CAUGHT" or kind == "SECURED" or kind == "CANCELLED"
 		or kind == "POD_DROPPED" or kind == "DISRUPTION_SUCCESS"
+		or kind == "SERVO_BRACE" or kind == "DISRUPTION_BLOCKED"
 		or kind == "PULSE_HIT" or kind == "PULSE_DODGED"
 	then
 		for key in pairs(payload) do
@@ -739,10 +740,33 @@ function FurnacePodChaseController.Start()
 	local stateRemote = requireChildOfClass(network, "FurnacePodChaseState", "RemoteEvent") :: RemoteEvent
 	confirmationRemote = requireChildOfClass(network, "FurnacePodStealConfirm", "RemoteEvent") :: RemoteEvent
 	ProximityPromptService.PromptShown:Connect(function(prompt: ProximityPrompt)
-		if prompt:GetAttribute("ODDWORKSPromptKind") == "FurnaceDisrupt"
-			and prompt:GetAttribute("CarrierUserId") == Players.LocalPlayer.UserId
-		then
+		if prompt:GetAttribute("ODDWORKSPromptKind") ~= "FurnaceDisrupt" then
+			return
+		end
+		if RunService:IsStudio() then
+			print(string.format(
+				"[ODDWORKS][FurnaceDisruptPrompt] Shown interaction=%s generation=%s possession=%s parent=%s enabled=%s",
+				tostring(prompt:GetAttribute("InteractionId")),
+				tostring(prompt:GetAttribute("RecoveryGeneration")),
+				tostring(prompt:GetAttribute("PossessionId")),
+				if prompt.Parent then prompt.Parent:GetFullName() else "nil",
+				tostring(prompt.Enabled)
+			))
+		end
+		-- Self-suppression is evaluated for this exact prompt lifetime. A later
+		-- possession receives a distinct instance and is evaluated from scratch.
+		if prompt:GetAttribute("CarrierUserId") == Players.LocalPlayer.UserId then
 			prompt.Enabled = false
+		end
+	end)
+	ProximityPromptService.PromptHidden:Connect(function(prompt: ProximityPrompt)
+		if RunService:IsStudio() and prompt:GetAttribute("ODDWORKSPromptKind") == "FurnaceDisrupt" then
+			print(string.format(
+				"[ODDWORKS][FurnaceDisruptPrompt] Hidden interaction=%s generation=%s possession=%s",
+				tostring(prompt:GetAttribute("InteractionId")),
+				tostring(prompt:GetAttribute("RecoveryGeneration")),
+				tostring(prompt:GetAttribute("PossessionId"))
+			))
 		end
 	end)
 	Players.LocalPlayer.CharacterRemoving:Connect(function()
@@ -814,6 +838,10 @@ function FurnacePodChaseController.Start()
 			showMessage("POD DROPPED\nRACE TO RECLAIM", Color3.fromRGB(255, 139, 59), 1.6, false)
 		elseif kind == "DISRUPTION_SUCCESS" then
 			showPulseFeedback("DISRUPTION SUCCESSFUL\nPOD IS CONTESTED", Color3.fromRGB(255, 190, 82), 1.2)
+		elseif kind == "SERVO_BRACE" then
+			showPulseFeedback("SERVO BRACE\nPOD RETAINED", Color3.fromRGB(186, 240, 255), 1.2)
+		elseif kind == "DISRUPTION_BLOCKED" then
+			showPulseFeedback("DISRUPTION BLOCKED\nSERVO GRIP HELD", Color3.fromRGB(186, 240, 255), 1.2)
 		elseif kind == "CAUGHT" then
 			hideSpringLegsActive()
 			clearPulseForecast()

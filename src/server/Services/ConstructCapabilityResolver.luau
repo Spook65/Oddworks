@@ -6,6 +6,7 @@ local ModularPrototypeStateService = require(Services:WaitForChild("ModularProto
 local ConstructCapabilityResolver = {}
 
 local SIGNAL_SCANNER_COMPONENT_ID = "SignalScanner"
+local SERVO_ARM_COMPONENT_ID = "ServoArm"
 local SPRING_LEGS_COMPONENT_ID = "SpringLegs"
 
 local function getInstalledComponentId(player: Player, slot: string): string?
@@ -34,6 +35,10 @@ end
 
 function ConstructCapabilityResolver.HasSpringLegsChaseCapability(player: Player): boolean
 	return getInstalledComponentId(player, "Legs") == SPRING_LEGS_COMPONENT_ID
+end
+
+function ConstructCapabilityResolver.HasSecureGripCapability(player: Player): boolean
+	return getInstalledComponentId(player, "Arm") == SERVO_ARM_COMPONENT_ID
 end
 
 return ConstructCapabilityResolver

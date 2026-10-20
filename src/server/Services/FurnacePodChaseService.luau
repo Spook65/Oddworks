@@ -3,6 +3,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Debris = game:GetService("Debris")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
@@ -78,6 +79,17 @@ export type DiagnosticSnapshot = {
 	LastDisruptorUserId: number?,
 	DisruptCooldownRemaining: number,
 	PostClaimProtectionRemaining: number,
+	DisruptPromptPresent: boolean,
+	DisruptPromptInteractionId: number?,
+	DisruptPromptGeneration: number?,
+	DisruptPromptPossessionId: number?,
+	DisruptPromptParent: string?,
+	ServoArmInstalled: boolean,
+	SecureGripCapability: boolean,
+	SecureGripAvailable: boolean,
+	SecureGripConsumed: boolean,
+	SecureGripCapabilityGeneration: number?,
+	SecureGripCapabilityPossessionId: number?,
 	SignalScannerInstalled: boolean,
 	PulseForecastCapability: boolean,
 	ConfiguredScrapPulseForecastSeconds: number,
@@ -112,6 +124,11 @@ local lastConfirmationTimes: { [Player]: number } = {}
 local lastDisruptTimes: { [Player]: number } = {}
 local movementOverride: MovementOverride? = nil
 local springLegsEligibleForAttempt = false
+local secureGripEligibleForPossession = false
+local secureGripAvailable = false
+local secureGripCapabilityGeneration = 0
+local secureGripCapabilityPossessionId = 0
+local servoBraceEffect: Model? = nil
 local nextScrapPulseAt = 0
 local nextScrapPulseId = 0
 local activeScrapPulse: ScrapPulseState? = nil
@@ -135,6 +152,7 @@ local cooldownEndsAt = 0
 local started = false
 local disruptPromptHandler: ((Player, number, number) -> ())? = nil
 local claimPromptHandler: ((Player, number, number) -> ())? = nil
+local nextDisruptInteractionId = 0
 
 local function requireChildOfClass(parent: Instance, childName: string, expectedClassName: string): Instance
 	local child = parent:FindFirstChild(childName)
@@ -413,9 +431,28 @@ local function destroyDroppedModel()
 	end
 end
 
+local function clearPossessionCapabilitySnapshot()
+	secureGripEligibleForPossession = false
+	secureGripAvailable = false
+	secureGripCapabilityGeneration = 0
+	secureGripCapabilityPossessionId = 0
+	if servoBraceEffect then
+		servoBraceEffect:Destroy()
+		servoBraceEffect = nil
+	end
+end
+
+local function capturePossessionCapabilities(player: Player, attemptToken: number, possessionToken: number)
+	secureGripEligibleForPossession = ConstructCapabilityResolver.HasSecureGripCapability(player)
+	secureGripAvailable = secureGripEligibleForPossession
+	secureGripCapabilityGeneration = attemptToken
+	secureGripCapabilityPossessionId = possessionToken
+end
+
 local function destroyAttemptModels()
 	destroyScrapPulseTelegraph()
 	nextScrapPulseAt = 0
+	clearPossessionCapabilitySnapshot()
 	destroyCarryModel()
 	destroyDroppedModel()
 	droppedPosition = nil
@@ -455,6 +492,63 @@ local function newDisplayPart(
 	part.BottomSurface = Enum.SurfaceType.Smooth
 	part.Parent = parent
 	return part
+end
+
+local function destroyDisruptPrompts(model: Model)
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("ProximityPrompt") and descendant.Name == "DisruptPrompt" then
+			descendant:Destroy()
+		end
+	end
+end
+
+local function createDisruptPrompt(
+	model: Model,
+	anchor: BasePart,
+	player: Player,
+	attemptToken: number,
+	possessionToken: number,
+	candidate: Definition
+): ProximityPrompt
+	-- The prompt is a possession-scoped projection. Replacing it gives nearby
+	-- clients a fresh ProximityPrompt lifetime instead of re-enabling stale focus.
+	destroyDisruptPrompts(model)
+	nextDisruptInteractionId += 1
+	local interactionId = nextDisruptInteractionId
+
+	local disruptPrompt = Instance.new("ProximityPrompt")
+	disruptPrompt.Name = "DisruptPrompt"
+	disruptPrompt.ActionText = "DISRUPT"
+	disruptPrompt.ObjectText = "FURNACE POD CARRIER"
+	disruptPrompt.HoldDuration = 0.2
+	disruptPrompt.MaxActivationDistance = candidate.DisruptRange
+	disruptPrompt.RequiresLineOfSight = true
+	disruptPrompt.ClickablePrompt = true
+	disruptPrompt.KeyboardKeyCode = Enum.KeyCode.E
+	disruptPrompt.GamepadKeyCode = Enum.KeyCode.ButtonX
+	disruptPrompt.Enabled = true
+	disruptPrompt:SetAttribute("ODDWORKSPromptKind", "FurnaceDisrupt")
+	disruptPrompt:SetAttribute("CarrierUserId", player.UserId)
+	disruptPrompt:SetAttribute("RecoveryGeneration", attemptToken)
+	disruptPrompt:SetAttribute("PossessionId", possessionToken)
+	disruptPrompt:SetAttribute("InteractionId", interactionId)
+	disruptPrompt.Triggered:Connect(function(attacker: Player)
+		if RunService:IsStudio() then
+			print(string.format(
+				"[ODDWORKS][FurnaceDisruptPrompt] Triggered interaction=%d generation=%d possession=%d attacker=%s",
+				interactionId,
+				attemptToken,
+				possessionToken,
+				attacker.Name
+			))
+		end
+		local handler = disruptPromptHandler
+		if handler then
+			handler(attacker, attemptToken, possessionToken)
+		end
+	end)
+	disruptPrompt.Parent = anchor
+	return disruptPrompt
 end
 
 local function createCarry(
@@ -519,26 +613,21 @@ local function createCarry(
 	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
 	highlight.Parent = model
 
-	local disruptPrompt = Instance.new("ProximityPrompt")
-	disruptPrompt.Name = "DisruptPrompt"
-	disruptPrompt.ActionText = "DISRUPT"
-	disruptPrompt.ObjectText = "FURNACE POD CARRIER"
-	disruptPrompt.HoldDuration = 0.2
-	disruptPrompt.MaxActivationDistance = candidate.DisruptRange
-	disruptPrompt.RequiresLineOfSight = true
-	disruptPrompt.ClickablePrompt = true
-	disruptPrompt.KeyboardKeyCode = Enum.KeyCode.E
-	disruptPrompt.GamepadKeyCode = Enum.KeyCode.ButtonX
-	disruptPrompt.Enabled = disruptEnabled
-	disruptPrompt:SetAttribute("ODDWORKSPromptKind", "FurnaceDisrupt")
-	disruptPrompt:SetAttribute("CarrierUserId", player.UserId)
-	disruptPrompt.Triggered:Connect(function(attacker: Player)
-		local handler = disruptPromptHandler
-		if handler then
-			handler(attacker, attemptToken, possessionToken)
-		end
-	end)
-	disruptPrompt.Parent = core
+	local disruptAnchor = addPart(
+		"DisruptAnchor",
+		CFrame.new(0, 1.8, 0),
+		Vector3.new(0.4, 0.4, 0.4),
+		Color3.fromRGB(255, 255, 255),
+		Enum.Material.SmoothPlastic,
+		nil
+	)
+	disruptAnchor.Transparency = 1
+	disruptAnchor:SetAttribute("RecoveryGeneration", attemptToken)
+	disruptAnchor:SetAttribute("PossessionId", possessionToken)
+	disruptAnchor:SetAttribute("CarrierUserId", player.UserId)
+	if disruptEnabled then
+		createDisruptPrompt(model, disruptAnchor, player, attemptToken, possessionToken, candidate)
+	end
 
 	local characterWeld = Instance.new("Weld")
 	characterWeld.Name = "CharacterCarryWeld"
@@ -766,11 +855,30 @@ local function isWardenRuntimePresent(): boolean
 		and model.PrimaryPart:IsDescendantOf(model)
 end
 
-local function setCarryDisruptEnabled(enabled: boolean)
+local function activateCurrentDisruptInteraction(
+	player: Player,
+	attemptToken: number,
+	possessionToken: number,
+	candidate: Definition
+)
 	local model = carryModel
-	local prompt = if model then model:FindFirstChild("DisruptPrompt", true) else nil
-	if prompt and prompt:IsA("ProximityPrompt") then
-		prompt.Enabled = enabled
+	if not model
+		or model:GetAttribute("RecoveryGeneration") ~= attemptToken
+		or model:GetAttribute("PossessionId") ~= possessionToken
+		or generation ~= attemptToken
+		or possessionId ~= possessionToken
+		or carrier ~= player
+		or state ~= "CHASE_ACTIVE"
+		or os.clock() < postClaimProtectionEndsAt
+	then
+		return
+	end
+	local anchor = model:FindFirstChild("DisruptAnchor", true)
+	if anchor and anchor:IsA("BasePart")
+		and anchor:GetAttribute("RecoveryGeneration") == attemptToken
+		and anchor:GetAttribute("PossessionId") == possessionToken
+	then
+		createDisruptPrompt(model, anchor, player, attemptToken, possessionToken, candidate)
 	end
 end
 
@@ -1410,6 +1518,83 @@ local function createContestStatus(position: Vector3, text: string, color: Color
 	Debris:AddItem(anchor, 1.2)
 end
 
+local function createServoBraceEffect(attemptToken: number, possessionToken: number)
+	local folder = runtimeFolder
+	local model = carryModel
+	if not folder or not model or not model.PrimaryPart then
+		return
+	end
+	if servoBraceEffect then
+		servoBraceEffect:Destroy()
+		servoBraceEffect = nil
+	end
+
+	local carryRoot = model.PrimaryPart
+	local rootCFrame = carryRoot.CFrame
+	local effect = Instance.new("Model")
+	effect.Name = "ServoBraceEffect"
+	effect:SetAttribute("RecoveryGeneration", attemptToken)
+	effect:SetAttribute("PossessionId", possessionToken)
+	local color = Color3.fromRGB(186, 240, 255)
+	local brackets = {
+		{ CFrame.new(-1.75, 0, -0.1), Vector3.new(0.22, 2.8, 0.35) },
+		{ CFrame.new(1.75, 0, -0.1), Vector3.new(0.22, 2.8, 0.35) },
+		{ CFrame.new(0, 1.75, -0.1), Vector3.new(2.8, 0.22, 0.35) },
+		{ CFrame.new(0, -1.75, -0.1), Vector3.new(2.8, 0.22, 0.35) },
+	}
+	for index, bracketDefinition in ipairs(brackets) do
+		local bracket = newDisplayPart(
+			effect,
+			"LockBracket" .. index,
+			rootCFrame,
+			bracketDefinition[1] :: CFrame,
+			bracketDefinition[2] :: Vector3,
+			color,
+			Enum.Material.Neon,
+			nil
+		)
+		bracket.Anchored = false
+		bracket.Massless = true
+		local weld = Instance.new("WeldConstraint")
+		weld.Name = "ServoBraceWeld"
+		weld.Part0 = carryRoot
+		weld.Part1 = bracket
+		weld.Parent = bracket
+		bracket.Transparency = 0.12
+		TweenService:Create(
+			bracket,
+			TweenInfo.new(0.48, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Transparency = 1 }
+		):Play()
+	end
+	effect.Parent = folder
+	servoBraceEffect = effect
+	task.delay(0.52, function()
+		if effect.Parent ~= nil then
+			effect:Destroy()
+		end
+		if servoBraceEffect == effect then
+			servoBraceEffect = nil
+		end
+	end)
+end
+
+local function consumeSecureGrip(player: Player, attemptToken: number, possessionToken: number): boolean
+	if generation ~= attemptToken
+		or possessionId ~= possessionToken
+		or carrier ~= player
+		or state ~= "CHASE_ACTIVE"
+		or secureGripCapabilityGeneration ~= attemptToken
+		or secureGripCapabilityPossessionId ~= possessionToken
+		or not secureGripEligibleForPossession
+		or not secureGripAvailable
+	then
+		return false
+	end
+	secureGripAvailable = false
+	return true
+end
+
 local function projectDropCandidate(candidatePosition: Vector3, excluded: { Instance }): Vector3?
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -1628,9 +1813,17 @@ disruptPromptHandler = function(attacker: Player, attemptToken: number, possessi
 		return
 	end
 
-	local dropPosition = getGroundedDropPosition(targetPlayer, targetRoot, attacker, attackerRoot, candidate)
 	lastDisruptTimes[attacker] = now
 	lastDisruptorUserId = attacker.UserId
+	if consumeSecureGrip(targetPlayer, attemptToken, possessionToken) then
+		createServoBraceEffect(attemptToken, possessionToken)
+		fireCarrier(targetPlayer, { Kind = "SERVO_BRACE" })
+		fireCarrier(attacker, { Kind = "DISRUPTION_BLOCKED" })
+		return
+	end
+
+	local dropPosition = getGroundedDropPosition(targetPlayer, targetRoot, attacker, attackerRoot, candidate)
+	clearPossessionCapabilitySnapshot()
 	destroyScrapPulseTelegraph()
 	setWardenPulseWindup(false)
 	restoreChaseMovement(targetPlayer)
@@ -1712,6 +1905,7 @@ claimPromptHandler = function(claimant: Player, attemptToken: number, droppedPos
 	dropTimeoutAt = 0
 	postClaimProtectionEndsAt = now + candidate.PostClaimProtectionSeconds
 	destroyDroppedModel()
+	capturePossessionCapabilities(claimant, attemptToken, newPossessionToken)
 
 	carryModel = createCarry(claimant, claimantRoot, attemptToken, newPossessionToken, candidate, false)
 	local springLegsActive = applyChaseMovement(claimant, humanoid, candidate)
@@ -1734,7 +1928,7 @@ claimPromptHandler = function(claimant: Player, attemptToken: number, droppedPos
 			and carrier == claimant
 			and state == "CHASE_ACTIVE"
 		then
-			setCarryDisruptEnabled(true)
+			activateCurrentDisruptInteraction(claimant, attemptToken, newPossessionToken, candidate)
 		end
 	end)
 	task.delay(candidate.ReclaimHeadStartSeconds, function()
@@ -1841,6 +2035,7 @@ local function beginAttempt(
 	setTargetAvailable(false)
 	setAvailabilityText("IN RECOVERY")
 	destroyAttemptModels()
+	capturePossessionCapabilities(player, attemptToken, possessionToken)
 
 	carryModel = createCarry(player, root, attemptToken, possessionToken, candidate, false)
 	wardenModel = createWarden(chaseRuntime.WardenSpawnMarker)
@@ -1891,7 +2086,7 @@ local function beginAttempt(
 		nextScrapPulseAt = chaseStartedAt + candidate.ScrapPulseCooldownSeconds
 		currentStage = 1
 		state = "CHASE_ACTIVE"
-		setCarryDisruptEnabled(true)
+		activateCurrentDisruptInteraction(player, attemptToken, possessionToken, candidate)
 		fireCarrier(player, { Kind = "CHASE_STARTED", Stage = 1 })
 		print(string.format("[ODDWORKS][FurnacePodChase] Scrap Warden chase active for %s.", player.Name))
 		task.spawn(runChase, player, attemptToken, possessionToken, candidate)
@@ -2170,7 +2365,14 @@ function FurnacePodChaseService.GetDiagnosticSnapshot(player: Player): Diagnosti
 	local now = os.clock()
 	local pulse = if isCarrier then activeScrapPulse else nil
 	local pulseDebuffActive = isCarrier and pulseDebuffAttackId ~= nil and pulseDebuffExpiresAt > now
+	local secureGripSnapshotActive = isCarrier
+		and activePhase
+		and secureGripCapabilityGeneration == generation
+		and secureGripCapabilityPossessionId == possessionId
 	local wardenDistanceToDroppedPod: number? = nil
+	local currentCarry = carryModel
+	local disruptPrompt = if currentCarry then currentCarry:FindFirstChild("DisruptPrompt", true) else nil
+	local activeDisruptPrompt = if disruptPrompt and disruptPrompt:IsA("ProximityPrompt") then disruptPrompt else nil
 	if state == "DROPPED_CONTESTED" and droppedPosition and wardenModel and wardenModel.PrimaryPart then
 		local wardenPosition = wardenModel:GetPivot().Position
 		local offset = Vector3.new(droppedPosition.X - wardenPosition.X, 0, droppedPosition.Z - wardenPosition.Z)
@@ -2214,6 +2416,17 @@ function FurnacePodChaseService.GetDiagnosticSnapshot(player: Player): Diagnosti
 			((lastDisruptTimes[player] or -candidate.DisruptCooldownSeconds) + candidate.DisruptCooldownSeconds) - now
 		),
 		PostClaimProtectionRemaining = math.max(0, postClaimProtectionEndsAt - now),
+		DisruptPromptPresent = activeDisruptPrompt ~= nil,
+		DisruptPromptInteractionId = if activeDisruptPrompt then activeDisruptPrompt:GetAttribute("InteractionId") else nil,
+		DisruptPromptGeneration = if activeDisruptPrompt then activeDisruptPrompt:GetAttribute("RecoveryGeneration") else nil,
+		DisruptPromptPossessionId = if activeDisruptPrompt then activeDisruptPrompt:GetAttribute("PossessionId") else nil,
+		DisruptPromptParent = if activeDisruptPrompt and activeDisruptPrompt.Parent then activeDisruptPrompt.Parent.Name else nil,
+		ServoArmInstalled = ConstructCapabilityResolver.HasSecureGripCapability(player),
+		SecureGripCapability = secureGripSnapshotActive and secureGripEligibleForPossession,
+		SecureGripAvailable = secureGripSnapshotActive and secureGripAvailable,
+		SecureGripConsumed = secureGripSnapshotActive and secureGripEligibleForPossession and not secureGripAvailable,
+		SecureGripCapabilityGeneration = if secureGripSnapshotActive then secureGripCapabilityGeneration else nil,
+		SecureGripCapabilityPossessionId = if secureGripSnapshotActive then secureGripCapabilityPossessionId else nil,
 		SignalScannerInstalled = ConstructCapabilityResolver.HasScrapPulseForecastCapability(player),
 		PulseForecastCapability = ConstructCapabilityResolver.HasScrapPulseForecastCapability(player),
 		ConfiguredScrapPulseForecastSeconds = candidate.ScrapPulseForecastSeconds,

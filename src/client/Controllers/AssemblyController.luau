@@ -47,6 +47,7 @@ local RARITY_ORDER: { [string]: number } = {
 }
 local COMPONENT_DESCRIPTIONS: { [string]: string } = {
 	SignalScanner = "Scrap Pulse early warning",
+	ServoArm = "Blocks the first valid Furnace Disrupt each possession",
 	SpringLegs = "Chase mobility boost",
 }
 
