@@ -13,6 +13,7 @@ local FirstTimeExperienceService = require(Services:WaitForChild("FirstTimeExper
 local KineticPodRecoveryConfig = require(Config:WaitForChild("KineticPodRecoveryConfig"))
 local ModularPrototypeStateService = require(Services:WaitForChild("ModularPrototypeStateService"))
 local OddlingDisplayService = require(Services:WaitForChild("OddlingDisplayService"))
+local OddlingVariantService = require(Services:WaitForChild("OddlingVariantService"))
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
 local RecoveryCarrierRegistry = require(Services:WaitForChild("RecoveryCarrierRegistry"))
 local WorkshopService = require(Services:WaitForChild("WorkshopService"))
@@ -642,6 +643,7 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 	local firstDiscovery = previousOwnedCount == 0
 	local shouldGrantSpringLegs = firstDiscovery
 	if not PlayerStateService.CanAddOwnedOddling(player, candidate.RewardSpeciesId, candidate.RewardSpeciesCount)
+		or not OddlingVariantService.CanResolveSpecies(candidate.RewardSpeciesId)
 		or (shouldGrantSpringLegs and not ModularPrototypeStateService.CanAddBankedComponent(
 			player,
 			candidate.RewardComponentId,
@@ -654,11 +656,18 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 		return
 	end
 
+	local recoveryResultKey = string.format("KINETIC:%d:%d", attemptToken, player.UserId)
+	local resolvedVariant = OddlingVariantService.ResolveVariant(
+		player,
+		recoveryResultKey,
+		candidate.RewardSpeciesId
+	)
 	if not PlayerStateService.AddOwnedOddling(player, candidate.RewardSpeciesId, candidate.RewardSpeciesCount) then
 		warn(string.format("[ODDWORKS][KineticPodRecovery] Voltlet ownership commit failed for %s.", player.Name))
 		failAttempt(player, attemptToken, false, "REWARD_FAILED")
 		return
 	end
+	local committedVariant = OddlingVariantService.CommitResolvedResult(player, recoveryResultKey)
 
 	local springLegsGranted = false
 	if shouldGrantSpringLegs then
@@ -689,6 +698,9 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 	local updatedState = PlayerStateService.GetSnapshot(player)
 	local ownedCount = if updatedState then updatedState.OwnedOddlings[candidate.RewardSpeciesId] or 0 else 0
 	local ftueManaged = FirstTimeExperienceService.RecordKineticSecure(player)
+	task.delay(1.2, function()
+		OddlingVariantService.PresentCommittedReveal(player, recoveryResultKey)
+	end)
 	firePlayer(player, {
 		Kind = "SECURED",
 		OddlingId = candidate.RewardSpeciesId,
@@ -701,10 +713,17 @@ local function completeSecure(player: Player, attemptToken: number, candidate: D
 		NextStep = if installed then "FURNACE" else "EQUIP",
 		DestinationPosition = destination,
 		FTUEManaged = ftueManaged,
+		SpeciesDisplayName = committedVariant.SpeciesDisplayName,
+		VariantId = committedVariant.VariantId,
+		VariantDisplayName = committedVariant.VariantDisplayName,
+		RarityLabel = committedVariant.RarityLabel,
+		AccentColor = committedVariant.AccentColor,
+		RevealIntensity = committedVariant.RevealIntensity,
 	})
 	print(string.format(
-		"[ODDWORKS][KineticPodRecovery] %s secured the Kinetic Pod and recovered Voltlet x%d%s.",
+		"[ODDWORKS][KineticPodRecovery] %s secured the Kinetic Pod and recovered %s Voltlet x%d%s.",
 		player.Name,
+		resolvedVariant.VariantId,
 		ownedCount,
 		if springLegsGranted then " with first-time SpringLegs bonus" else ""
 	))

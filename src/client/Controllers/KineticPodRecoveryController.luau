@@ -11,6 +11,14 @@ local RecoveryFeelEffects = require(script.Parent.RecoveryFeelEffects)
 local KineticPodRecoveryController = {}
 
 type KineticGuidanceMode = "EDGE" | "WORLD" | "NEAR"
+type VariantPresentation = {
+	SpeciesDisplayName: string,
+	VariantId: string,
+	VariantDisplayName: string,
+	RarityLabel: string,
+	AccentColor: Color3,
+	RevealIntensity: number,
+}
 
 local KINETIC_OBJECTIVE_TEXT = "RECOVER THE KINETIC POD"
 local KINETIC_NEAR_ENTER_DISTANCE = 10
@@ -384,6 +392,42 @@ local function isFiniteVector3(value: any): boolean
 		and math.abs(value.Z) < math.huge
 end
 
+local function readVariantPresentation(payload: any, expectedSpeciesName: string): VariantPresentation?
+	if payload.SpeciesDisplayName ~= expectedSpeciesName
+		or typeof(payload.VariantId) ~= "string"
+		or #payload.VariantId == 0
+		or typeof(payload.VariantDisplayName) ~= "string"
+		or #payload.VariantDisplayName == 0
+		or typeof(payload.RarityLabel) ~= "string"
+		or #payload.RarityLabel == 0
+		or typeof(payload.AccentColor) ~= "Color3"
+		or typeof(payload.RevealIntensity) ~= "number"
+		or payload.RevealIntensity < 1
+		or payload.RevealIntensity > 2
+	then
+		return nil
+	end
+	return {
+		SpeciesDisplayName = payload.SpeciesDisplayName,
+		VariantId = payload.VariantId,
+		VariantDisplayName = payload.VariantDisplayName,
+		RarityLabel = payload.RarityLabel,
+		AccentColor = payload.AccentColor,
+		RevealIntensity = payload.RevealIntensity,
+	}
+end
+
+local function getVariantRevealText(variant: VariantPresentation): string
+	if variant.VariantId == "Standard" then
+		return string.upper(variant.SpeciesDisplayName) .. "\nSTANDARD"
+	end
+	return string.upper(variant.VariantDisplayName)
+		.. " "
+		.. string.upper(variant.SpeciesDisplayName)
+		.. "\n"
+		.. string.upper(variant.RarityLabel)
+end
+
 local function readPayload(payload: any): { [string]: any }?
 	if typeof(payload) ~= "table" or typeof(payload.Kind) ~= "string" then
 		return nil
@@ -403,6 +447,7 @@ local function readPayload(payload: any): { [string]: any }?
 			return nil
 		end
 	elseif kind == "SECURED" then
+		local variant = readVariantPresentation(payload, "Voltlet")
 		if payload.OddlingId ~= "Voltlet"
 			or typeof(payload.OwnedCount) ~= "number"
 			or payload.OwnedCount < 1
@@ -415,6 +460,7 @@ local function readPayload(payload: any): { [string]: any }?
 			or typeof(payload.FTUEManaged) ~= "boolean"
 			or (payload.NextStep ~= "EQUIP" and payload.NextStep ~= "FURNACE")
 			or not isFiniteVector3(payload.DestinationPosition)
+			or not variant
 		then
 			return nil
 		end
@@ -481,31 +527,29 @@ local function handleKineticState(payload: any)
 	elseif kind == "SECURED" then
 		clearObjective()
 		RecoveryFeelEffects.Secured()
+		local variant = readVariantPresentation(validated, "Voltlet") :: VariantPresentation
+		local revealText = getVariantRevealText(variant)
+		local revealDuration = 1.8 + (variant.RevealIntensity - 1) * 1.25
 		if validated.FTUEManaged then
 			showMessage("POD SECURED", Color3.fromRGB(117, 255, 178), 1.1)
 			local token = presentationToken
 			task.delay(1.2, function()
 				if presentationToken == token then
-					RecoveryFeelEffects.Revealed(Color3.fromRGB(58, 225, 255), false)
-					showMessage(
-						if validated.FirstDiscovery then "VOLTLET DISCOVERED" else "VOLTLET RECOVERED",
-						Color3.fromRGB(108, 232, 255),
-						1.8
-					)
+					RecoveryFeelEffects.Revealed(variant.AccentColor, variant.RevealIntensity >= 1.75)
+					showMessage(revealText, variant.AccentColor, revealDuration)
 				end
 			end)
 			return
 		end
 		showMessage("POD SECURED", Color3.fromRGB(117, 255, 178), 1.1)
-		local rewardText = if validated.FirstDiscovery then "VOLTLET DISCOVERED" else "VOLTLET RECOVERED"
 		local text = if validated.NextStep == "FURNACE" then "FURNACE POD - HIGH SECURITY" else "EQUIP SPRINGLEGS AT ASSEMBLER"
 		local token = presentationToken
 		task.delay(1.2, function()
 			if presentationToken ~= token then
 				return
 			end
-			RecoveryFeelEffects.Revealed(Color3.fromRGB(58, 225, 255), false)
-			showMessage(rewardText, Color3.fromRGB(108, 232, 255), 2.8)
+			RecoveryFeelEffects.Revealed(variant.AccentColor, variant.RevealIntensity >= 1.75)
+			showMessage(revealText, variant.AccentColor, math.max(2.8, revealDuration))
 			local rewardToken = presentationToken
 			task.delay(2.9, function()
 				if presentationToken ~= rewardToken then

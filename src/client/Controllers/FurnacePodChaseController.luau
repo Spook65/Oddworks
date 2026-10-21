@@ -11,6 +11,15 @@ local RecoveryFeelEffects = require(script.Parent.RecoveryFeelEffects)
 
 local FurnacePodChaseController = {}
 
+type VariantPresentation = {
+	SpeciesDisplayName: string,
+	VariantId: string,
+	VariantDisplayName: string,
+	RarityLabel: string,
+	AccentColor: Color3,
+	RevealIntensity: number,
+}
+
 local banner: TextLabel? = nil
 local abilityToast: TextLabel? = nil
 local pulseToast: TextLabel? = nil
@@ -622,6 +631,42 @@ local function isFiniteVector3(value: any): boolean
 		and math.abs(value.Z) < math.huge
 end
 
+local function readVariantPresentation(payload: any, expectedSpeciesName: string): VariantPresentation?
+	if payload.SpeciesDisplayName ~= expectedSpeciesName
+		or typeof(payload.VariantId) ~= "string"
+		or #payload.VariantId == 0
+		or typeof(payload.VariantDisplayName) ~= "string"
+		or #payload.VariantDisplayName == 0
+		or typeof(payload.RarityLabel) ~= "string"
+		or #payload.RarityLabel == 0
+		or typeof(payload.AccentColor) ~= "Color3"
+		or typeof(payload.RevealIntensity) ~= "number"
+		or payload.RevealIntensity < 1
+		or payload.RevealIntensity > 2
+	then
+		return nil
+	end
+	return {
+		SpeciesDisplayName = payload.SpeciesDisplayName,
+		VariantId = payload.VariantId,
+		VariantDisplayName = payload.VariantDisplayName,
+		RarityLabel = payload.RarityLabel,
+		AccentColor = payload.AccentColor,
+		RevealIntensity = payload.RevealIntensity,
+	}
+end
+
+local function getVariantRevealText(variant: VariantPresentation): string
+	if variant.VariantId == "Standard" then
+		return string.upper(variant.SpeciesDisplayName) .. "\nSTANDARD"
+	end
+	return string.upper(variant.VariantDisplayName)
+		.. " "
+		.. string.upper(variant.SpeciesDisplayName)
+		.. "\n"
+		.. string.upper(variant.RarityLabel)
+end
+
 local function readPayload(payload: any): (string?, number?, string?, number?, Vector3?, boolean?, boolean?, number?)
 	if typeof(payload) ~= "table" or typeof(payload.Kind) ~= "string" then
 		return nil, nil, nil, nil, nil, nil, nil, nil
@@ -700,16 +745,28 @@ local function readPayload(payload: any): (string?, number?, string?, number?, V
 		end
 		return kind, nil, nil, payload.ForecastDuration, payload.TargetPosition, nil, nil, payload.AttackId
 	elseif kind == "REVEALED" then
+		local variant = readVariantPresentation(payload, "Kilnback")
 		if payload.SignatureId ~= "Kilnback"
 			or typeof(payload.OwnedCount) ~= "number"
 			or payload.OwnedCount < 1
 			or payload.OwnedCount % 1 ~= 0
 			or typeof(payload.FirstDiscovery) ~= "boolean"
+			or not variant
 		then
 			return nil, nil, nil, nil, nil, nil, nil, nil
 		end
 		for key in pairs(payload) do
-			if key ~= "Kind" and key ~= "SignatureId" and key ~= "OwnedCount" and key ~= "FirstDiscovery" then
+			if key ~= "Kind"
+				and key ~= "SignatureId"
+				and key ~= "OwnedCount"
+				and key ~= "FirstDiscovery"
+				and key ~= "SpeciesDisplayName"
+				and key ~= "VariantId"
+				and key ~= "VariantDisplayName"
+				and key ~= "RarityLabel"
+				and key ~= "AccentColor"
+				and key ~= "RevealIntensity"
+			then
 				return nil, nil, nil, nil, nil, nil, nil, nil
 			end
 		end
@@ -858,13 +915,9 @@ function FurnacePodChaseController.Start()
 			hideSpringLegsActive()
 			clearPulseForecast()
 			clearObjectiveCue()
-			RecoveryFeelEffects.Revealed(Color3.fromRGB(255, 133, 36), true)
-			showMessage(
-				string.upper(revealText :: string) .. (if firstDiscovery then " DISCOVERED" else " RECOVERED"),
-				Color3.fromRGB(255, 174, 48),
-				4,
-				false
-			)
+			local variant = readVariantPresentation(payload, "Kilnback") :: VariantPresentation
+			RecoveryFeelEffects.Revealed(variant.AccentColor, true)
+			showMessage(getVariantRevealText(variant), variant.AccentColor, 4, false)
 		elseif kind == "CANCELLED" then
 			clearChasePresentation()
 		elseif kind == "PULSE_HIT" then

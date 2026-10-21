@@ -112,6 +112,13 @@ end
 
 local OddlingDisplayService = require(oddlingDisplayServiceModule)
 
+local oddlingVariantServiceModule = Services:WaitForChild("OddlingVariantService")
+if not oddlingVariantServiceModule:IsA("ModuleScript") then
+	error("[ODDWORKS][Server] Server.Services.OddlingVariantService must be a ModuleScript.")
+end
+
+local OddlingVariantService = require(oddlingVariantServiceModule)
+
 local oddlingCollectionServiceModule = Services:WaitForChild("OddlingCollectionService")
 if not oddlingCollectionServiceModule:IsA("ModuleScript") then
 	error("[ODDWORKS][Server] Server.Services.OddlingCollectionService must be a ModuleScript.")
@@ -253,6 +260,7 @@ WorkshopService.Start()
 FirstTimeExperienceService.Start()
 OddlingCollectionService.Start()
 OddlingDisplayService.Start()
+OddlingVariantService.Start()
 HypeService.Start()
 WorkshopUpgradeService.Start()
 WorkshopBankingService.Start()

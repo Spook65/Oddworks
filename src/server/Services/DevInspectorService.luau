@@ -14,6 +14,7 @@ local KineticPodRecoveryService = require(Services:WaitForChild("KineticPodRecov
 local ModularPrototypeStateService = require(Services:WaitForChild("ModularPrototypeStateService"))
 local OddlingCollectionService = require(Services:WaitForChild("OddlingCollectionService"))
 local OddlingDisplayService = require(Services:WaitForChild("OddlingDisplayService"))
+local OddlingVariantService = require(Services:WaitForChild("OddlingVariantService"))
 local PersistenceService = require(Services:WaitForChild("PersistenceService"))
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
 local PrototypeConstructRuntimeService = require(Services:WaitForChild("PrototypeConstructRuntimeService"))
@@ -175,6 +176,9 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 	local constructRuntime = PrototypeConstructRuntimeService.GetDiagnosticSnapshot(player)
 	local signatureRuntime = SignatureDiscoveryService.GetDiagnosticSnapshot(player)
 	local ftue = FirstTimeExperienceService.GetDiagnosticSnapshot(player)
+	local variants = OddlingVariantService.GetDiagnosticSnapshot(player)
+	local voltletFinds = variants.SessionFinds.Voltlet or {}
+	local kilnbackFinds = variants.SessionFinds.Kilnback or {}
 	local persistenceStatus = PersistenceService.GetStatus(player)
 	local speedOverride = speedOverrides[player]
 	if speedOverride and speedOverride.Humanoid.Parent == nil then
@@ -279,6 +283,18 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 		ChaseDisruptPromptGeneration = chase.DisruptPromptGeneration,
 		ChaseDisruptPromptPossessionId = chase.DisruptPromptPossessionId,
 		ChaseDisruptPromptParent = chase.DisruptPromptParent,
+		LastVariantResultKey = variants.LastRecoveryResultKey,
+		LastVariantSpecies = variants.LastSpeciesId,
+		LastVariantId = variants.LastVariantId,
+		LastVariantRarity = variants.LastRarityLabel,
+		LastVariantResolvedOnce = variants.LastResolvedOnce,
+		LastVariantResolveRequests = variants.LastResolveRequestCount,
+		VoltletStandardFinds = voltletFinds.Standard or 0,
+		VoltletChargedFinds = voltletFinds.Charged or 0,
+		VoltletOverclockedFinds = voltletFinds.Overclocked or 0,
+		KilnbackStandardFinds = kilnbackFinds.Standard or 0,
+		KilnbackTemperedFinds = kilnbackFinds.Tempered or 0,
+		KilnbackMoltenFinds = kilnbackFinds.Molten or 0,
 		ServoArmInstalled = chase.ServoArmInstalled,
 		SecureGripCapability = chase.SecureGripCapability,
 		SecureGripAvailable = chase.SecureGripAvailable,

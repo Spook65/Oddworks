@@ -14,6 +14,7 @@ local ConstructCapabilityResolver = require(Services:WaitForChild("ConstructCapa
 local FurnacePodChaseConfig = require(Config:WaitForChild("FurnacePodChaseConfig"))
 local ModularPrototypeStateService = require(Services:WaitForChild("ModularPrototypeStateService"))
 local OddlingDisplayService = require(Services:WaitForChild("OddlingDisplayService"))
+local OddlingVariantService = require(Services:WaitForChild("OddlingVariantService"))
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
 local RecoveryCarrierRegistry = require(Services:WaitForChild("RecoveryCarrierRegistry"))
 local SignatureDiscoveryService = require(Services:WaitForChild("SignatureDiscoveryService"))
@@ -1367,16 +1368,25 @@ local function completeSecure(player: Player, attemptToken: number, possessionTo
 		if not OddlingDisplayService.HasRuntimeTemplate("Kilnback")
 			or not SignatureDiscoveryService.CanRevealKilnbackFromFurnacePod(player)
 			or not PlayerStateService.CanAddOwnedOddling(player, "Kilnback", 1)
+			or not OddlingVariantService.CanResolveSpecies("Kilnback")
 		then
 			warn(string.format("[ODDWORKS][FurnacePodChase] Kilnback reward preflight failed for %s.", player.Name))
 			cancelAttempt(player, attemptToken, possessionToken, "REWARD_FAILED")
 			return
 		end
+		local recoveryResultKey = string.format(
+			"FURNACE:%d:%d:%d",
+			attemptToken,
+			possessionToken,
+			player.UserId
+		)
+		OddlingVariantService.ResolveVariant(player, recoveryResultKey, "Kilnback")
 		if not PlayerStateService.AddOwnedOddling(player, "Kilnback", 1) then
 			warn(string.format("[ODDWORKS][FurnacePodChase] Kilnback ownership commit failed for %s.", player.Name))
 			cancelAttempt(player, attemptToken, possessionToken, "REWARD_FAILED")
 			return
 		end
+		local committedVariant = OddlingVariantService.CommitResolvedResult(player, recoveryResultKey)
 
 		if not SignatureDiscoveryService.RevealKilnbackFromFurnacePod(player) then
 			-- Ownership has already committed and remains authoritative. Presentation
@@ -1389,18 +1399,30 @@ local function completeSecure(player: Player, attemptToken: number, possessionTo
 		carrier = nil
 		local updatedState = PlayerStateService.GetSnapshot(player)
 		local ownedCount = if updatedState then updatedState.OwnedOddlings.Kilnback or 0 else 0
+		OddlingVariantService.PresentCommittedReveal(player, recoveryResultKey)
 		fireCarrier(player, {
 			Kind = "REVEALED",
 			SignatureId = "Kilnback",
 			OwnedCount = ownedCount,
 			FirstDiscovery = firstDiscovery,
+			SpeciesDisplayName = committedVariant.SpeciesDisplayName,
+			VariantId = committedVariant.VariantId,
+			VariantDisplayName = committedVariant.VariantDisplayName,
+			RarityLabel = committedVariant.RarityLabel,
+			AccentColor = committedVariant.AccentColor,
+			RevealIntensity = committedVariant.RevealIntensity,
 		})
 		generation += 1
 		local resetToken = generation
 		state = "RESETTING"
 		setAvailabilityText(string.format("RECHARGING %ds", math.ceil(candidate.SuccessCooldownSeconds)))
 		scheduleReset(resetToken, candidate.SuccessCooldownSeconds)
-		print(string.format("[ODDWORKS][FurnacePodChase] %s recovered Kilnback x%d.", player.Name, ownedCount))
+		print(string.format(
+			"[ODDWORKS][FurnacePodChase] %s recovered %s Kilnback x%d.",
+			player.Name,
+			committedVariant.VariantId,
+			ownedCount
+		))
 	end)
 end
 

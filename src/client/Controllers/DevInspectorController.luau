@@ -156,6 +156,26 @@ local function renderSnapshot(payload: any)
 		string.format("Capability Generation: %s", formatInteger(payload.SecureGripCapabilityGeneration)),
 		string.format("Capability PossessionId: %s", formatInteger(payload.SecureGripCapabilityPossessionId)),
 		"",
+		"ODDLING VARIANTS (SESSION ONLY)",
+		string.format("Result Key: %s", formatString(payload.LastVariantResultKey)),
+		string.format("Species: %s", formatString(payload.LastVariantSpecies)),
+		string.format("Variant: %s", formatString(payload.LastVariantId)),
+		string.format("Rarity: %s", formatString(payload.LastVariantRarity)),
+		string.format("Resolved Once: %s", formatBoolean(payload.LastVariantResolvedOnce)),
+		string.format("Resolve Requests: %s", formatInteger(payload.LastVariantResolveRequests)),
+		string.format(
+			"Voltlet S/C/O: %s / %s / %s",
+			formatInteger(payload.VoltletStandardFinds),
+			formatInteger(payload.VoltletChargedFinds),
+			formatInteger(payload.VoltletOverclockedFinds)
+		),
+		string.format(
+			"Kilnback S/T/M: %s / %s / %s",
+			formatInteger(payload.KilnbackStandardFinds),
+			formatInteger(payload.KilnbackTemperedFinds),
+			formatInteger(payload.KilnbackMoltenFinds)
+		),
+		"",
 		"SCRAP PULSE",
 		string.format("Ready: %s", formatBoolean(payload.ScrapPulseReady)),
 		string.format("AttackId: %s", formatInteger(payload.ScrapPulseAttackId)),
