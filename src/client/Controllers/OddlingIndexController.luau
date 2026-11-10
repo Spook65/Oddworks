@@ -545,7 +545,7 @@ local function handleFeedback(payload: any)
 	if typeof(payload) == "table"
 		and payload.Kind == "ODDLING_ADDED"
 		and isShortText(payload.SpeciesId)
-		and payload.FirstOwnedCopy == true
+		and payload.NewIndexEntry == true
 	then
 		showNewEntry(payload.SpeciesId)
 	end

@@ -5,6 +5,9 @@
     "ReplicatedStorage": {
       "ODDWORKSNetwork": {
         "$className": "Folder",
+        "SignalCacheState": {
+          "$className": "RemoteEvent"
+        },
         "StateRequest": {
           "$className": "RemoteEvent"
         },
@@ -2068,6 +2071,9 @@
       },
       "ODDWORKSWorld": {
         "$className": "Folder",
+        "SignalCacheArea": {
+          "$path": "assets/world/SignalCacheArea.model.json"
+        },
         "Foundation": {
           "$className": "Part",
           "$properties": {

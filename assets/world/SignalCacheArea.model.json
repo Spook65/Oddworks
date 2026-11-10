@@ -1,0 +1,357 @@
+{
+  "ClassName": "Model",
+  "Children": [
+    {
+      "Name": "Pad",
+      "ClassName": "Part",
+      "Properties": {
+        "Anchored": true,
+        "Size": [
+          36,
+          0.2,
+          28
+        ],
+        "Position": [
+          -60,
+          0.1,
+          220
+        ],
+        "Color": [
+          0.28,
+          0.32,
+          0.31
+        ],
+        "Material": "Metal",
+        "TopSurface": "Smooth",
+        "BottomSurface": "Smooth"
+      }
+    },
+    {
+      "Name": "CacheA",
+      "ClassName": "Part",
+      "Properties": {
+        "Anchored": true,
+        "Size": [
+          4,
+          3,
+          4
+        ],
+        "Position": [
+          -72,
+          1.7,
+          220
+        ],
+        "Color": [
+          0.35,
+          0.43,
+          0.4
+        ],
+        "Material": "Metal",
+        "TopSurface": "Smooth",
+        "BottomSurface": "Smooth"
+      },
+      "Children": [
+        {
+          "Name": "SignalLens",
+          "ClassName": "Part",
+          "Properties": {
+            "Anchored": true,
+            "Size": [
+              1.7,
+              0.3,
+              1.7
+            ],
+            "Position": [
+              -72,
+              3.35,
+              220
+            ],
+            "Color": [
+              0.55,
+              0.95,
+              0.64
+            ],
+            "Material": "Neon",
+            "TopSurface": "Smooth",
+            "BottomSurface": "Smooth",
+            "CanCollide": false,
+            "CanTouch": false,
+            "CanQuery": false
+          }
+        },
+        {
+          "Name": "Label",
+          "ClassName": "BillboardGui",
+          "Properties": {
+            "Size": {
+              "UDim2": [
+                [
+                  0,
+                  130
+                ],
+                [
+                  0,
+                  38
+                ]
+              ]
+            },
+            "StudsOffset": [
+              0,
+              3,
+              0
+            ],
+            "MaxDistance": 55,
+            "AlwaysOnTop": false
+          },
+          "Children": [
+            {
+              "Name": "Text",
+              "ClassName": "TextLabel",
+              "Properties": {
+                "Size": {
+                  "UDim2": [
+                    [
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      0
+                    ]
+                  ]
+                },
+                "BackgroundTransparency": 1,
+                "Text": "CACHE A",
+                "TextSize": 16,
+                "TextColor3": [
+                  0.85,
+                  1,
+                  0.9
+                ],
+                "Font": "GothamBold"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "CacheB",
+      "ClassName": "Part",
+      "Properties": {
+        "Anchored": true,
+        "Size": [
+          4,
+          3,
+          4
+        ],
+        "Position": [
+          -60,
+          1.7,
+          220
+        ],
+        "Color": [
+          0.35,
+          0.43,
+          0.4
+        ],
+        "Material": "Metal",
+        "TopSurface": "Smooth",
+        "BottomSurface": "Smooth"
+      },
+      "Children": [
+        {
+          "Name": "SignalLens",
+          "ClassName": "Part",
+          "Properties": {
+            "Anchored": true,
+            "Size": [
+              1.7,
+              0.3,
+              1.7
+            ],
+            "Position": [
+              -60,
+              3.35,
+              220
+            ],
+            "Color": [
+              0.55,
+              0.95,
+              0.64
+            ],
+            "Material": "Neon",
+            "TopSurface": "Smooth",
+            "BottomSurface": "Smooth",
+            "CanCollide": false,
+            "CanTouch": false,
+            "CanQuery": false
+          }
+        },
+        {
+          "Name": "Label",
+          "ClassName": "BillboardGui",
+          "Properties": {
+            "Size": {
+              "UDim2": [
+                [
+                  0,
+                  130
+                ],
+                [
+                  0,
+                  38
+                ]
+              ]
+            },
+            "StudsOffset": [
+              0,
+              3,
+              0
+            ],
+            "MaxDistance": 55,
+            "AlwaysOnTop": false
+          },
+          "Children": [
+            {
+              "Name": "Text",
+              "ClassName": "TextLabel",
+              "Properties": {
+                "Size": {
+                  "UDim2": [
+                    [
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      0
+                    ]
+                  ]
+                },
+                "BackgroundTransparency": 1,
+                "Text": "CACHE B",
+                "TextSize": 16,
+                "TextColor3": [
+                  0.85,
+                  1,
+                  0.9
+                ],
+                "Font": "GothamBold"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "CacheC",
+      "ClassName": "Part",
+      "Properties": {
+        "Anchored": true,
+        "Size": [
+          4,
+          3,
+          4
+        ],
+        "Position": [
+          -48,
+          1.7,
+          220
+        ],
+        "Color": [
+          0.35,
+          0.43,
+          0.4
+        ],
+        "Material": "Metal",
+        "TopSurface": "Smooth",
+        "BottomSurface": "Smooth"
+      },
+      "Children": [
+        {
+          "Name": "SignalLens",
+          "ClassName": "Part",
+          "Properties": {
+            "Anchored": true,
+            "Size": [
+              1.7,
+              0.3,
+              1.7
+            ],
+            "Position": [
+              -48,
+              3.35,
+              220
+            ],
+            "Color": [
+              0.55,
+              0.95,
+              0.64
+            ],
+            "Material": "Neon",
+            "TopSurface": "Smooth",
+            "BottomSurface": "Smooth",
+            "CanCollide": false,
+            "CanTouch": false,
+            "CanQuery": false
+          }
+        },
+        {
+          "Name": "Label",
+          "ClassName": "BillboardGui",
+          "Properties": {
+            "Size": {
+              "UDim2": [
+                [
+                  0,
+                  130
+                ],
+                [
+                  0,
+                  38
+                ]
+              ]
+            },
+            "StudsOffset": [
+              0,
+              3,
+              0
+            ],
+            "MaxDistance": 55,
+            "AlwaysOnTop": false
+          },
+          "Children": [
+            {
+              "Name": "Text",
+              "ClassName": "TextLabel",
+              "Properties": {
+                "Size": {
+                  "UDim2": [
+                    [
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      0
+                    ]
+                  ]
+                },
+                "BackgroundTransparency": 1,
+                "Text": "CACHE C",
+                "TextSize": 16,
+                "TextColor3": [
+                  0.85,
+                  1,
+                  0.9
+                ],
+                "Font": "GothamBold"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

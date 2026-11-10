@@ -390,6 +390,7 @@ local function handlePlayerStateChanged(player: Player)
 					FirstSlotIndex = firstSlot,
 					DisplayFull = autoDisplayedCount < addedCount,
 					FirstOwnedCopy = previousOwnedCount == 0,
+					NewIndexEntry = previousOwnedCount == 0 and definition.IndexVisible == true,
 				})
 			end
 		end

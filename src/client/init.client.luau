@@ -68,6 +68,7 @@ if not kineticPodRecoveryControllerModule:IsA("ModuleScript") then
 end
 
 local KineticPodRecoveryController = require(kineticPodRecoveryControllerModule)
+local SignalCacheRecoveryController = require(Controllers:WaitForChild("SignalCacheRecoveryController"))
 
 local oddityContainmentControllerModule = Controllers:WaitForChild("OddityContainmentController")
 if not oddityContainmentControllerModule:IsA("ModuleScript") then
@@ -113,6 +114,7 @@ AssemblyController.Start()
 SignalDiscoveryController.Start()
 FurnacePodChaseController.Start()
 KineticPodRecoveryController.Start()
+SignalCacheRecoveryController.Start()
 OddityContainmentController.Start()
 OddlingCollectionController.Start()
 OddlingIndexController.Start()

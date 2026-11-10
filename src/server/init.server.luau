@@ -188,6 +188,7 @@ if not kineticPodRecoveryServiceModule:IsA("ModuleScript") then
 end
 
 local KineticPodRecoveryService = require(kineticPodRecoveryServiceModule)
+local SignalCacheRecoveryService = require(Services:WaitForChild("SignalCacheRecoveryService"))
 
 local oddityContainmentServiceModule = Services:WaitForChild("OddityContainmentService")
 if not oddityContainmentServiceModule:IsA("ModuleScript") then
@@ -262,6 +263,7 @@ SignatureDiscoveryService.Start()
 RecoveryCarrierRegistry.Start()
 FurnacePodChaseService.Start()
 KineticPodRecoveryService.Start()
+SignalCacheRecoveryService.Start()
 OddityContainmentService.Start()
 SalvageService.Start()
 OuterYardSalvageService.Start()
