@@ -1,5 +1,7 @@
 --!strict
 
+export type PursuitMode = "DIRECT" | "VISIBLE_LEAD"
+
 export type FurnacePodChaseDefinition = {
 	WorldModelName: string,
 	InteractionPartName: string,
@@ -21,6 +23,13 @@ export type FurnacePodChaseDefinition = {
 	StageOneSeconds: number,
 	StageTwoSeconds: number,
 	StageSpeeds: { number },
+	PursuitMode: PursuitMode,
+	PursuitLeadSeconds: number,
+	PursuitMaxLeadDistance: number,
+	PursuitMinPlanarSpeed: number,
+	PursuitMaxPlausiblePlanarSpeed: number,
+	PursuitStableDirectionDot: number,
+	PursuitMaxSampleSeconds: number,
 	ScrapPulseForecastSeconds: number,
 	ScrapPulseTelegraphSeconds: number,
 	ScrapPulseCooldownSeconds: number,
@@ -67,6 +76,14 @@ local definition: FurnacePodChaseDefinition = {
 	StageOneSeconds = 2,
 	StageTwoSeconds = 5,
 	StageSpeeds = { 10.5, 14.5, 18.0 },
+	-- Session-only A/B switch. Use DIRECT for the unchanged control behavior.
+	PursuitMode = "DIRECT",
+	PursuitLeadSeconds = 0.45,
+	PursuitMaxLeadDistance = 8,
+	PursuitMinPlanarSpeed = 4,
+	PursuitMaxPlausiblePlanarSpeed = 40,
+	PursuitStableDirectionDot = 0.85,
+	PursuitMaxSampleSeconds = 0.3,
 	ScrapPulseForecastSeconds = 0.35,
 	ScrapPulseTelegraphSeconds = 1.0,
 	ScrapPulseCooldownSeconds = 5.0,

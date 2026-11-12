@@ -21,6 +21,13 @@ local WorkshopService = require(Services:WaitForChild("WorkshopService"))
 
 type ChaseState = "AVAILABLE" | "STOLEN" | "ACTIVATING" | "CHASE_ACTIVE" | "DROPPED_CONTESTED" | "RECLAIMING" | "RESETTING" | "SECURED"
 type Definition = FurnacePodChaseConfig.FurnacePodChaseDefinition
+type MotionObservation = {
+	Generation: number,
+	PossessionId: number,
+	Position: Vector3,
+	ObservedAt: number,
+	Direction: Vector3?,
+}
 type PartPresentation = {
 	Transparency: number,
 	CanCollide: boolean,
@@ -101,6 +108,12 @@ export type DiagnosticSnapshot = {
 	ScrapPulseDebuffActive: boolean,
 	ScrapPulseDebuffMultiplier: number,
 	ScrapPulseDebuffRemaining: number,
+	PursuitMode: string,
+	LeadActive: boolean,
+	LeadDistance: number,
+	LineOfSight: string,
+	MotionConfidence: string,
+	TargetType: string,
 	CooldownRemaining: number,
 }
 
@@ -153,6 +166,17 @@ local started = false
 local disruptPromptHandler: ((Player, number, number) -> ())? = nil
 local claimPromptHandler: ((Player, number, number) -> ())? = nil
 local nextDisruptInteractionId = 0
+local motionObservation: MotionObservation? = nil
+local pursuitLeadActive = false
+local pursuitLeadDistance = 0
+local pursuitLineOfSight = "BLOCKED"
+local pursuitMotionConfidence = "rejected"
+local pursuitTargetType = "CURRENT_POSITION"
+local pursuitRaycastParams = RaycastParams.new()
+pursuitRaycastParams.FilterType = Enum.RaycastFilterType.Exclude
+local pursuitFilterCharacter: Model? = nil
+local pursuitFilterCarry: Model? = nil
+local pursuitFilterWarden: Model? = nil
 
 local function requireChildOfClass(parent: Instance, childName: string, expectedClassName: string): Instance
 	local child = parent:FindFirstChild(childName)
@@ -217,6 +241,18 @@ local function validateDefinition(candidate: Definition)
 		or not isPositiveFinite(candidate.StageSpeeds[1])
 		or not isPositiveFinite(candidate.StageSpeeds[2])
 		or not isPositiveFinite(candidate.StageSpeeds[3])
+		or (candidate.PursuitMode ~= "DIRECT" and candidate.PursuitMode ~= "VISIBLE_LEAD")
+		or not isPositiveFinite(candidate.PursuitLeadSeconds)
+		or candidate.PursuitLeadSeconds > 1
+		or not isPositiveFinite(candidate.PursuitMaxLeadDistance)
+		or candidate.PursuitMaxLeadDistance > 8
+		or not isPositiveFinite(candidate.PursuitMinPlanarSpeed)
+		or not isPositiveFinite(candidate.PursuitMaxPlausiblePlanarSpeed)
+		or candidate.PursuitMaxPlausiblePlanarSpeed <= candidate.PursuitMinPlanarSpeed
+		or not isPositiveFinite(candidate.PursuitStableDirectionDot)
+		or candidate.PursuitStableDirectionDot > 1
+		or not isPositiveFinite(candidate.PursuitMaxSampleSeconds)
+		or candidate.PursuitMaxSampleSeconds > 0.5
 		or not isPositiveFinite(candidate.ScrapPulseForecastSeconds)
 		or candidate.ScrapPulseForecastSeconds > 0.75
 		or not isPositiveFinite(candidate.ScrapPulseTelegraphSeconds)
@@ -431,6 +467,36 @@ local function destroyDroppedModel()
 	end
 end
 
+local function applyWardenPredictivePresentation(active: boolean)
+	local model = wardenModel
+	local eye = if model then model:FindFirstChild("Eye") else nil
+	if eye and eye:IsA("BasePart") then
+		eye.Color = if active then Color3.fromRGB(78, 224, 255) else Color3.fromRGB(255, 190, 54)
+		eye.Transparency = if active then 0 else eye.Transparency
+		local light = eye:FindFirstChild("PredictiveLockLight")
+		if light and light:IsA("PointLight") then
+			light.Brightness = if active then 5 else 0
+		end
+	end
+	if model then
+		model:SetAttribute("PredictiveLockActive", active)
+	end
+end
+
+local function clearPredictivePursuit()
+	motionObservation = nil
+	pursuitFilterCharacter = nil
+	pursuitFilterCarry = nil
+	pursuitFilterWarden = nil
+	pursuitRaycastParams.FilterDescendantsInstances = {}
+	pursuitLeadActive = false
+	pursuitLeadDistance = 0
+	pursuitLineOfSight = "BLOCKED"
+	pursuitMotionConfidence = "rejected"
+	pursuitTargetType = "CURRENT_POSITION"
+	applyWardenPredictivePresentation(false)
+end
+
 local function clearPossessionCapabilitySnapshot()
 	secureGripEligibleForPossession = false
 	secureGripAvailable = false
@@ -450,6 +516,7 @@ local function capturePossessionCapabilities(player: Player, attemptToken: numbe
 end
 
 local function destroyAttemptModels()
+	clearPredictivePursuit()
 	destroyScrapPulseTelegraph()
 	nextScrapPulseAt = 0
 	clearPossessionCapabilitySnapshot()
@@ -818,6 +885,12 @@ local function createWarden(spawnMarker: BasePart): Model
 	pulseLight.Color = Color3.fromRGB(255, 104, 36)
 	pulseLight.Range = 16
 	pulseLight.Parent = pulseEmitter
+	local predictiveLockLight = Instance.new("PointLight")
+	predictiveLockLight.Name = "PredictiveLockLight"
+	predictiveLockLight.Brightness = 0
+	predictiveLockLight.Color = Color3.fromRGB(78, 224, 255)
+	predictiveLockLight.Range = 18
+	predictiveLockLight.Parent = eye
 	eye.Transparency = 0.65
 	alarmBeacon.Transparency = 0.65
 	pulseEmitter.Transparency = 0.78
@@ -977,6 +1050,125 @@ local function setWardenPulseWindup(active: boolean)
 			light.Brightness = if active then 5 else 0
 		end
 	end
+end
+
+local function refreshPursuitRaycastFilter(player: Player)
+	local character = player.Character
+	if character == pursuitFilterCharacter
+		and carryModel == pursuitFilterCarry
+		and wardenModel == pursuitFilterWarden
+	then
+		return
+	end
+	local excluded: { Instance } = {}
+	if character then
+		table.insert(excluded, character)
+	end
+	if carryModel then
+		table.insert(excluded, carryModel :: Model)
+	end
+	if wardenModel then
+		table.insert(excluded, wardenModel :: Model)
+	end
+	pursuitRaycastParams.FilterDescendantsInstances = excluded
+	pursuitFilterCharacter = character
+	pursuitFilterCarry = carryModel
+	pursuitFilterWarden = wardenModel
+end
+
+local function observePlanarMotion(
+	position: Vector3,
+	now: number,
+	attemptToken: number,
+	possessionToken: number,
+	candidate: Definition
+): (Vector3?, number?)
+	local previous = motionObservation
+	if not previous
+		or previous.Generation ~= attemptToken
+		or previous.PossessionId ~= possessionToken
+	then
+		motionObservation = {
+			Generation = attemptToken,
+			PossessionId = possessionToken,
+			Position = position,
+			ObservedAt = now,
+			Direction = nil,
+		}
+		return nil, nil
+	end
+
+	local sampleSeconds = now - previous.ObservedAt
+	local displacement = Vector3.new(position.X - previous.Position.X, 0, position.Z - previous.Position.Z)
+	local distance = displacement.Magnitude
+	local speed = if sampleSeconds > 0 then distance / sampleSeconds else math.huge
+	local plausible = sampleSeconds > 0
+		and sampleSeconds <= candidate.PursuitMaxSampleSeconds
+		and speed <= candidate.PursuitMaxPlausiblePlanarSpeed
+	local direction = if plausible and speed >= candidate.PursuitMinPlanarSpeed and distance > 0 then displacement.Unit else nil
+	motionObservation = {
+		Generation = attemptToken,
+		PossessionId = possessionToken,
+		Position = position,
+		ObservedAt = now,
+		Direction = direction,
+	}
+	if not direction
+		or not previous.Direction
+		or direction:Dot(previous.Direction) < candidate.PursuitStableDirectionDot
+	then
+		return nil, nil
+	end
+	return direction, speed
+end
+
+local function selectPursuitTarget(
+	player: Player,
+	root: BasePart,
+	now: number,
+	attemptToken: number,
+	possessionToken: number,
+	candidate: Definition
+): Vector3
+	pursuitLeadActive = false
+	pursuitLeadDistance = 0
+	pursuitLineOfSight = "BLOCKED"
+	pursuitMotionConfidence = "rejected"
+	pursuitTargetType = "CURRENT_POSITION"
+
+	local direction, speed = observePlanarMotion(root.Position, now, attemptToken, possessionToken, candidate)
+	if not direction or not speed then
+		applyWardenPredictivePresentation(false)
+		return root.Position
+	end
+	pursuitMotionConfidence = "eligible"
+	local model = wardenModel
+	if not model or not model.PrimaryPart then
+		applyWardenPredictivePresentation(false)
+		return root.Position
+	end
+
+	refreshPursuitRaycastFilter(player)
+	local eye = model:FindFirstChild("Eye")
+	local sightOrigin = if eye and eye:IsA("BasePart") then eye.Position else model:GetPivot().Position
+	if Workspace:Raycast(sightOrigin, root.Position - sightOrigin, pursuitRaycastParams) ~= nil then
+		applyWardenPredictivePresentation(false)
+		return root.Position
+	end
+	pursuitLineOfSight = "CLEAR"
+
+	local leadDistance = math.min(speed * candidate.PursuitLeadSeconds, candidate.PursuitMaxLeadDistance)
+	local leadTarget = root.Position + direction * leadDistance
+	if Workspace:Raycast(root.Position, leadTarget - root.Position, pursuitRaycastParams) ~= nil then
+		applyWardenPredictivePresentation(false)
+		return root.Position
+	end
+
+	pursuitLeadActive = true
+	pursuitLeadDistance = leadDistance
+	pursuitTargetType = "LEAD_POSITION"
+	applyWardenPredictivePresentation(true)
+	return leadTarget
 end
 
 local function getScrapPulseTargetPosition(player: Player, root: BasePart, humanoid: Humanoid, candidate: Definition): Vector3
@@ -1444,7 +1636,17 @@ local function runChase(player: Player, attemptToken: number, possessionToken: n
 			fireCarrier(player, { Kind = "STAGE", Stage = stage })
 		end
 
-		local distance = moveWardenToward(root.Position, candidate.StageSpeeds[stage], math.min(now - previousClock, 0.25))
+		local distance: number
+		if candidate.PursuitMode == "VISIBLE_LEAD" then
+			local wardenPosition = (wardenModel :: Model):GetPivot().Position
+			local carrierOffset = Vector3.new(root.Position.X - wardenPosition.X, 0, root.Position.Z - wardenPosition.Z)
+			distance = carrierOffset.Magnitude
+			local pursuitTarget = selectPursuitTarget(player, root, now, attemptToken, possessionToken, candidate)
+			moveWardenToward(pursuitTarget, candidate.StageSpeeds[stage], math.min(now - previousClock, 0.25))
+		else
+			-- Control path intentionally retains the original target and movement call.
+			distance = moveWardenToward(root.Position, candidate.StageSpeeds[stage], math.min(now - previousClock, 0.25))
+		end
 		previousClock = now
 		if distance <= candidate.CatchRadius then
 			failAttempt(player, attemptToken, possessionToken, true, true)
@@ -1823,6 +2025,7 @@ disruptPromptHandler = function(attacker: Player, attemptToken: number, possessi
 	end
 
 	local dropPosition = getGroundedDropPosition(targetPlayer, targetRoot, attacker, attackerRoot, candidate)
+	clearPredictivePursuit()
 	clearPossessionCapabilitySnapshot()
 	destroyScrapPulseTelegraph()
 	setWardenPulseWindup(false)
@@ -1897,6 +2100,7 @@ claimPromptHandler = function(claimant: Player, attemptToken: number, droppedPos
 	end
 	local now = os.clock()
 	local newPossessionToken = droppedPossessionToken + 1
+	clearPredictivePursuit()
 	carrier = claimant
 	possessionId = newPossessionToken
 	state = "RECLAIMING"
@@ -2032,6 +2236,7 @@ local function beginAttempt(
 	local possessionToken = possessionId
 	state = "STOLEN"
 	carrier = player
+	clearPredictivePursuit()
 	setTargetAvailable(false)
 	setAvailabilityText("IN RECOVERY")
 	destroyAttemptModels()
@@ -2443,6 +2648,12 @@ function FurnacePodChaseService.GetDiagnosticSnapshot(player: Player): Diagnosti
 		ScrapPulseDebuffActive = pulseDebuffActive,
 		ScrapPulseDebuffMultiplier = candidate.ScrapPulseSlowMultiplier,
 		ScrapPulseDebuffRemaining = if pulseDebuffActive then math.max(0, pulseDebuffExpiresAt - now) else 0,
+		PursuitMode = candidate.PursuitMode,
+		LeadActive = isCarrier and pursuitLeadActive,
+		LeadDistance = if isCarrier then pursuitLeadDistance else 0,
+		LineOfSight = if isCarrier then pursuitLineOfSight else "BLOCKED",
+		MotionConfidence = if isCarrier then pursuitMotionConfidence else "rejected",
+		TargetType = if isCarrier then pursuitTargetType else "CURRENT_POSITION",
 		CooldownRemaining = if state == "RESETTING" then math.max(0, cooldownEndsAt - os.clock()) else 0,
 	}
 end
