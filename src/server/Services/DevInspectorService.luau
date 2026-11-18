@@ -290,6 +290,8 @@ local function buildSnapshot(player: Player, actionMessage: string?, actionSucce
 		WardenStage = chase.WardenStage,
 		CarryRuntimePresent = chase.CarryRuntimePresent,
 		WardenRuntimePresent = chase.WardenRuntimePresent,
+		FurnaceNavigationMode = chase.NavigationMode,
+		FurnaceNavigation = chase.Navigation,
 		ScrapPulseReady = chase.ScrapPulseReady,
 		ScrapPulseAttackId = chase.ScrapPulseAttackId,
 		PulseForecastSent = chase.ScrapPulseForecastSent,

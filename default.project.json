@@ -2436,6 +2436,28 @@
         },
         "FurnaceRoutePrototype": {
           "$className": "Model",
+          "FurnaceNavigation": {
+            "$className": "Folder",
+            "B1_WF": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [-16, 0.5, 96]}},
+            "B1_WH": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [-16, 0.5, 84]}},
+            "B1_EF": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [16, 0.5, 96]}},
+            "B1_EH": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [16, 0.5, 84]}},
+            "B2_WF": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [-16, 0.5, 156]}},
+            "B2_WH": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [-16, 0.5, 144]}},
+            "B2_EF": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [16, 0.5, 156]}},
+            "B2_EH": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [16, 0.5, 144]}},
+            "B3_WF": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [-16, 0.5, 216]}},
+            "B3_WH": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [-16, 0.5, 204]}},
+            "B3_EF": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [16, 0.5, 216]}},
+            "B3_EH": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [16, 0.5, 204]}},
+            "F_E_SITE": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [20, 0.5, 300]}},
+            "F_E_REAR": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [20, 0.5, 314]}},
+            "F_C_REAR": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [0, 0.5, 314]}},
+            "P_W_IN": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [-32, 0.5, 32]}},
+            "P_W_OUT": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [-38, 0.5, 10]}},
+            "P_E_IN": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [32, 0.5, 32]}},
+            "P_E_OUT": {"$className": "Part", "$properties": {"Anchored": true, "CanCollide": false, "CanTouch": false, "CanQuery": false, "Transparency": 1, "Size": [0.2, 0.2, 0.2], "Position": [38, 0.5, 10]}}
+          },
           "ShortRouteFloor": {
             "$className": "Part",
             "$properties": {

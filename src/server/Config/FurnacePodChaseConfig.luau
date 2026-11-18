@@ -1,6 +1,7 @@
 --!strict
 
 export type FurnacePodChaseDefinition = {
+	NavigationMode: "DIRECT" | "OBSTACLE_ROUTE",
 	WorldModelName: string,
 	InteractionPartName: string,
 	WardenSpawnMarkerName: string,
@@ -47,6 +48,7 @@ export type FurnacePodChaseDefinition = {
 local FurnacePodChaseConfig = {}
 
 local definition: FurnacePodChaseDefinition = {
+	NavigationMode = "DIRECT",
 	WorldModelName = "FurnacePodTarget",
 	InteractionPartName = "PodShell",
 	WardenSpawnMarkerName = "WardenSpawnMarker",

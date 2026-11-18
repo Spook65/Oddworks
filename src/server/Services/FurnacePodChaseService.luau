@@ -12,6 +12,9 @@ local ServerRoot = assert(Services.Parent, "[ODDWORKS][FurnacePodChase] Services
 local Config = ServerRoot:WaitForChild("Config")
 local ConstructCapabilityResolver = require(Services:WaitForChild("ConstructCapabilityResolver"))
 local FurnacePodChaseConfig = require(Config:WaitForChild("FurnacePodChaseConfig"))
+local FurnaceObstacleNavigator = require(Services:WaitForChild("FurnaceObstacleNavigator"))
+local obstacleNavigator: any = nil
+local navigationContactAllowed = true
 local ModularPrototypeStateService = require(Services:WaitForChild("ModularPrototypeStateService"))
 local OddlingDisplayService = require(Services:WaitForChild("OddlingDisplayService"))
 local PlayerStateService = require(Services:WaitForChild("PlayerStateService"))
@@ -59,6 +62,8 @@ export type DiagnosticSnapshot = {
 	WardenStage: number?,
 	CarryRuntimePresent: boolean,
 	WardenRuntimePresent: boolean,
+	NavigationMode: string,
+	Navigation: any,
 	SpringLegsEligible: boolean,
 	SpringLegsApplicationRecord: boolean,
 	SpringLegsSpeedMatchesExpected: boolean,
@@ -450,6 +455,8 @@ local function capturePossessionCapabilities(player: Player, attemptToken: numbe
 end
 
 local function destroyAttemptModels()
+	navigationContactAllowed = true
+	if obstacleNavigator then FurnaceObstacleNavigator.Clear(obstacleNavigator) end
 	destroyScrapPulseTelegraph()
 	nextScrapPulseAt = 0
 	clearPossessionCapabilitySnapshot()
@@ -1303,7 +1310,19 @@ local function getStage(elapsed: number, candidate: Definition): number
 	return 3
 end
 
-local function moveWardenToward(targetPosition: Vector3, speed: number, deltaTime: number): number
+local function horizontalDistance(a: Vector3, b: Vector3): number
+	return (Vector3.new(a.X, 0, a.Z) - Vector3.new(b.X, 0, b.Z)).Magnitude
+end
+
+local function shouldResolveWardenContact(
+	actualTargetDistance: number,
+	radius: number,
+	contactAllowed: boolean
+): boolean
+	return contactAllowed and actualTargetDistance <= radius
+end
+
+local function moveWardenToward(targetPosition: Vector3, speed: number, deltaTime: number, contactRadius: number): number
 	local model = wardenModel
 	if not model or model.Parent == nil or not model.PrimaryPart then
 		return math.huge
@@ -1311,7 +1330,27 @@ local function moveWardenToward(targetPosition: Vector3, speed: number, deltaTim
 	local pivot = model:GetPivot()
 	local flatTarget = Vector3.new(targetPosition.X, pivot.Position.Y, targetPosition.Z)
 	local offset = flatTarget - pivot.Position
-	local distance = offset.Magnitude
+	local distance = horizontalDistance(pivot.Position, targetPosition)
+	navigationContactAllowed = true
+	if definition and definition.NavigationMode == "OBSTACLE_ROUTE" then
+		if not obstacleNavigator then navigationContactAllowed = false; return distance end
+		-- Contact asks whether solid geometry separates the current Warden and
+		-- actual target. It intentionally does not reuse the wider body envelope
+		-- that decides whether the Warden may occupy a locomotion segment.
+		navigationContactAllowed = obstacleNavigator:ContactSegmentLegal(pivot.Position, targetPosition)
+		local nextPivot, reachable = FurnaceObstacleNavigator.Step(
+			obstacleNavigator, pivot, targetPosition, speed * deltaTime, os.clock(), generation, possessionId, state,
+			contactRadius
+		)
+		model:PivotTo(nextPivot)
+		wardenCFrame = nextPivot
+		-- Waypoints and route reachability never replace the accepted pre-movement
+		-- actual horizontal distance or the independent contact predicate.
+		if not reachable then
+			return distance
+		end
+		return distance
+	end
 	if distance > 0.001 then
 		local direction = offset.Unit
 		local newPosition = pivot.Position + direction * math.min(speed * deltaTime, distance)
@@ -1444,9 +1483,11 @@ local function runChase(player: Player, attemptToken: number, possessionToken: n
 			fireCarrier(player, { Kind = "STAGE", Stage = stage })
 		end
 
-		local distance = moveWardenToward(root.Position, candidate.StageSpeeds[stage], math.min(now - previousClock, 0.25))
+		local distance = moveWardenToward(
+			root.Position, candidate.StageSpeeds[stage], math.min(now - previousClock, 0.25), candidate.CatchRadius
+		)
 		previousClock = now
-		if distance <= candidate.CatchRadius then
+		if shouldResolveWardenContact(distance, candidate.CatchRadius, navigationContactAllowed) then
 			failAttempt(player, attemptToken, possessionToken, true, true)
 			return
 		end
@@ -1755,10 +1796,13 @@ local function runDroppedContest(attemptToken: number, droppedPossessionToken: n
 		local distance = moveWardenToward(
 			targetPosition,
 			candidate.StageSpeeds[stage],
-			math.min(now - previousClock, 0.25)
+			math.min(now - previousClock, 0.25),
+			candidate.WardenReclaimRadius
 		)
 		previousClock = now
-		if now >= claimOpenAt and distance <= candidate.WardenReclaimRadius then
+		if now >= claimOpenAt
+			and shouldResolveWardenContact(distance, candidate.WardenReclaimRadius, navigationContactAllowed)
+		then
 			createContestPulse(targetPosition, "FurnaceWardenReclaimImpact", Color3.fromRGB(255, 83, 37))
 			createContestStatus(targetPosition, "POD RECLAIMED", Color3.fromRGB(255, 151, 67))
 			resetDroppedAttempt(attemptToken, droppedPossessionToken, "WARDEN_RECLAIM")
@@ -1823,6 +1867,7 @@ disruptPromptHandler = function(attacker: Player, attemptToken: number, possessi
 	end
 
 	local dropPosition = getGroundedDropPosition(targetPlayer, targetRoot, attacker, attackerRoot, candidate)
+	if obstacleNavigator then FurnaceObstacleNavigator.Clear(obstacleNavigator) end
 	clearPossessionCapabilitySnapshot()
 	destroyScrapPulseTelegraph()
 	setWardenPulseWindup(false)
@@ -1897,6 +1942,7 @@ claimPromptHandler = function(claimant: Player, attemptToken: number, droppedPos
 	end
 	local now = os.clock()
 	local newPossessionToken = droppedPossessionToken + 1
+	if obstacleNavigator then FurnaceObstacleNavigator.Clear(obstacleNavigator) end
 	carrier = claimant
 	possessionId = newPossessionToken
 	state = "RECLAIMING"
@@ -2391,6 +2437,8 @@ function FurnacePodChaseService.GetDiagnosticSnapshot(player: Player): Diagnosti
 		WardenStage = if state == "CHASE_ACTIVE" then currentStage else nil,
 		CarryRuntimePresent = isCarrier and isCarryRuntimePresent(player),
 		WardenRuntimePresent = isCarrier and isWardenRuntimePresent(),
+		NavigationMode = candidate.NavigationMode,
+		Navigation = if obstacleNavigator then table.clone(obstacleNavigator.Diagnostic) else {},
 		SpringLegsEligible = isCarrier
 			and activePhase
 			and ConstructCapabilityResolver.HasSpringLegsChaseCapability(player),
@@ -2447,6 +2495,91 @@ function FurnacePodChaseService.GetDiagnosticSnapshot(player: Player): Diagnosti
 	}
 end
 
+-- Explicit Studio-only service integration checks. This exercises the same
+-- contact, actual-distance, secure-volume, and navigator boundaries used by
+-- the live chase without exposing a production remote or mutation control.
+function FurnacePodChaseService.RunObstacleNavigationIntegrationTests(testWorld: Instance): string
+	assert(RunService:IsStudio(), "Studio only")
+	local navigator = FurnaceObstacleNavigator.new(testWorld)
+	assert(navigator.Valid, "Service integration requires a valid authored navigator")
+	local candidate = FurnacePodChaseConfig.GetDefinition()
+	local function resolves(a: Vector3, b: Vector3, radius: number): boolean
+		return shouldResolveWardenContact(
+			horizontalDistance(a, b),
+			radius,
+			navigator:ContactSegmentLegal(a, b)
+		)
+	end
+
+	assert(resolves(Vector3.new(30, 0.5, 100), Vector3.new(32, 0.5, 100), candidate.CatchRadius),
+		"Open-ground catch rejected")
+	assert(resolves(Vector3.new(0, 0.5, 214), Vector3.new(2, 0.5, 214), candidate.CatchRadius),
+		"Same-side near-wall catch rejected")
+	assert(not resolves(Vector3.new(0, 0.5, 208.4), Vector3.new(0, 0.5, 211.6), candidate.CatchRadius),
+		"Cross-wall catch passed")
+	assert(resolves(Vector3.new(-58, 0.5, 24), Vector3.new(-56, 0.5, 24), candidate.WardenReclaimRadius),
+		"Same-side reclaim rejected")
+	assert(not resolves(Vector3.new(0, 0.5, 208.4), Vector3.new(0, 0.5, 211.6), candidate.WardenReclaimRadius),
+		"Cross-wall reclaim passed")
+
+	local routeStart = Vector3.new(0, 0.5, 220)
+	local routeTarget = Vector3.new(0, 0.5, 200)
+	local actualDistance = horizontalDistance(routeStart, routeTarget)
+	local _, routeReachable = FurnaceObstacleNavigator.Step(
+		navigator, CFrame.new(routeStart), routeTarget, 0, 0, 7, 1, "CHASE_ACTIVE", candidate.CatchRadius
+	)
+	assert(routeReachable and navigator.Diagnostic.MovementTarget == "WAYPOINT", "Expected waypoint route")
+	assert(math.abs(actualDistance - 20) < 0.001, "Waypoint changed actual-target distance")
+	assert(actualDistance > candidate.ScrapPulseRadius, "Pulse test setup is not distance-discriminating")
+
+	local plots = testWorld:FindFirstChild("WorkshopPlots")
+	assert(plots, "WorkshopPlots missing")
+	for _, plotName in ipairs({"Plot01", "Plot02"}) do
+		local plot = (plots :: Instance):FindFirstChild(plotName)
+		local zone = plot and plot:FindFirstChild(candidate.SecureZoneName)
+		assert(zone and zone:IsA("BasePart"), plotName .. " secure zone missing")
+		assert(isInsideVolume((zone :: BasePart).Position, zone :: BasePart), plotName .. " secure center rejected")
+		FurnaceObstacleNavigator.Clear(navigator)
+		local _, reachable = FurnaceObstacleNavigator.Step(
+			navigator, CFrame.new(0, 0.5, 100), (zone :: BasePart).Position, 0, 1, 7, 1, "CHASE_ACTIVE",
+			candidate.CatchRadius
+		)
+		assert(reachable, plotName .. " secure approach unreachable")
+	end
+
+	FurnaceObstacleNavigator.Clear(navigator)
+	local preservedWarden = CFrame.new(0, 0.5, 220)
+	local afterCarrier, carrierReachable = FurnaceObstacleNavigator.Step(
+			navigator, preservedWarden, Vector3.new(0, 0.5, 200), 0, 2, 7, 1, "CHASE_ACTIVE", candidate.CatchRadius
+	)
+	assert(carrierReachable and afterCarrier.Position == preservedWarden.Position,
+		"Zero-budget carrier route translated Warden")
+	FurnaceObstacleNavigator.Clear(navigator)
+	local afterDrop, dropReachable = FurnaceObstacleNavigator.Step(
+			navigator, preservedWarden, Vector3.new(0, 0.5, 190), 0, 3, 7, 1, "DROPPED_CONTESTED",
+			candidate.WardenReclaimRadius
+	)
+	assert(dropReachable and afterDrop.Position == preservedWarden.Position and navigator.Phase == "DROPPED_CONTESTED",
+		"Drop route did not begin from preserved Warden transform")
+	FurnaceObstacleNavigator.Clear(navigator)
+	local afterClaim, claimReachable = FurnaceObstacleNavigator.Step(
+			navigator, preservedWarden, Vector3.new(20, 0.5, 180), 0, 4, 7, 2, "CHASE_ACTIVE",
+			candidate.CatchRadius
+	)
+	assert(claimReachable and afterClaim.Position == preservedWarden.Position and navigator.Possession == 2,
+		"New claimant did not receive a fresh route at preserved Warden transform")
+
+	FurnaceObstacleNavigator.Clear(navigator)
+	local unreachablePivot = CFrame.new(0, 0.5, 220)
+	local unchanged, unreachable = FurnaceObstacleNavigator.Step(
+			navigator, unreachablePivot, Vector3.new(100, 0.5, 200), 1.8, 5, 7, 2, "DROPPED_CONTESTED",
+			candidate.WardenReclaimRadius
+	)
+	assert(not unreachable and unchanged == unreachablePivot, "Unreachable drop moved or teleported Warden")
+	assert(candidate.DroppedTimeoutSeconds == 8.0, "Existing dropped timeout changed")
+	return "PASS: service catch/reclaim contact, actual distance, secure zones, lifecycle, reconstruction transform, unreachable timeout"
+end
+
 function FurnacePodChaseService.Start()
 	if started then
 		return
@@ -2455,8 +2588,17 @@ function FurnacePodChaseService.Start()
 
 	local candidate = FurnacePodChaseConfig.GetDefinition()
 	validateDefinition(candidate)
+	assert(candidate.NavigationMode == "DIRECT" or candidate.NavigationMode == "OBSTACLE_ROUTE", "Invalid Furnace navigation mode")
 	definition = candidate
 	runtime = discoverRuntime(candidate)
+	if candidate.NavigationMode == "OBSTACLE_ROUTE" then
+		obstacleNavigator = FurnaceObstacleNavigator.new(Workspace:WaitForChild("ODDWORKSWorld"))
+		if not obstacleNavigator.Valid then
+			(runtime :: ChaseRuntime).Prompt.Enabled = false
+			warn("[ODDWORKS][Furnace] OBSTACLE_ROUTE invalid graph; experiment disabled.")
+			return
+		end
+	end
 	startTargetPulse((runtime :: ChaseRuntime).TargetModel)
 
 	local network = requireChildOfClass(ReplicatedStorage, "ODDWORKSNetwork", "Folder")
